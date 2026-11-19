@@ -1,3 +1,5 @@
 config,pass_count,n,fail_tiles
 daugman|channel=red|clahe=True|inpaint=True (rmax_frac=0.48),14,24,0 2 3 5 6 8 9 21 22 23
 daugman|channel=red|clahe=True|inpaint=True|rmax_frac=0.6,22,24,2 23(pupil)
+onnx|model=seg_small_224.onnx (round 2: zoom augmentation),5,24,pupil OK on ~19/24 but limbus underestimated / mask fragmented on most (real high-res texture unseen in training)
+hybrid|model=seg_small_224.onnx|limbus=search,20,24,3 7 16 22 (all due to wrong model pupil)

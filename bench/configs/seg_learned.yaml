@@ -8,3 +8,5 @@ segmenters:
   - name: hybrid
     params:
       model: [seg_small_160.onnx, seg_small_224_int8.onnx, seg_small_224.onnx, seg_large_224.onnx]
+  - name: hybrid
+    params: {model: [seg_small_224.onnx, seg_small_224_int8.onnx], limbus: search}

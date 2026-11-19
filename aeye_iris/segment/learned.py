@@ -99,9 +99,13 @@ class OnnxSeg(_OnnxBase):
 class HybridSeg(_OnnxBase):
     """Model geometry + classical band-limited edge refinement."""
 
-    def __init__(self, band: float = 0.08, n_rays: int = 64, **kw):
+    def __init__(self, band: float = 0.08, n_rays: int = 64, limbus: str = "band",
+                 rmax_frac: float = 0.6, **kw):
+        """limbus='band': refine model limbus within +-band.
+        limbus='search': keep the model PUPIL, find the limbus with the classical
+        integro-differential search seeded at the pupil centre (radius 1.33r..rmax)."""
         super().__init__(**kw)
-        self.band, self.n_rays = band, n_rays
+        self.band, self.n_rays, self.limbus_mode, self.rmax_frac = band, n_rays, limbus, rmax_frac
 
     def _refine(self, g, e: Ellipse, angles, sign=+1):
         out_x, out_y = [], []
@@ -126,7 +130,9 @@ class HybridSeg(_OnnxBase):
     def __call__(self, bgr: np.ndarray) -> SegResult:
         lab = self.predict(bgr)
         pupil, limbus = self.geometry(lab)
-        tag = f"hybrid[{self.model_name}]"
+        tag = f"hybrid[{self.model_name},{self.limbus_mode}]"
+        if self.limbus_mode == "search" and pupil is not None:
+            return self._pupil_then_limbus(bgr, pupil, tag)
         if limbus is None:
             return SegResult(None, None, method=tag)
         g = cv2.GaussianBlur(prepare(bgr, "red", False, True)[0], (0, 0), 1.0).astype(np.float32)
@@ -140,6 +146,27 @@ class HybridSeg(_OnnxBase):
         iris_mask = ((lab == 1) & (limbus.to_mask(lab.shape) > 0) & (pupil.to_mask(lab.shape) == 0))
         return SegResult(pupil, limbus, iris_mask.astype(np.uint8),
                          pupil.to_mask(lab.shape), tag)
+
+
+def _pupil_then_limbus_impl(self, bgr, pupil, tag):
+    from .classical import LIMBUS_ANGLES, _grid, _ido_search
+    g, clean, spec = prepare(bgr, "red", True, True)
+    gs, s = resize_max(g, 240)
+    gs = cv2.GaussianBlur(gs, (0, 0), 1.0).astype(np.float32)
+    pr = pupil.r * s
+    rmax = self.rmax_frac * min(gs.shape)
+    lo = pr / 0.75
+    if lo >= rmax - 3:
+        return SegResult(None, None, method=tag)
+    off = 0.15 * lo + 2
+    c = _grid(pupil.cx * s - off, pupil.cx * s + off, pupil.cy * s - off, pupil.cy * s + off, 1.5)
+    radii = np.arange(lo, min(rmax, pr / 0.12), 1.0, dtype=np.float32)
+    (lx, ly), lR, _ = _ido_search(gs, c, radii, LIMBUS_ANGLES, 1.5)
+    limbus = Ellipse.circle(lx / s, ly / s, lR / s)
+    return finalize(clean, pupil, limbus, spec, tag, True, 3.0)
+
+
+HybridSeg._pupil_then_limbus = _pupil_then_limbus_impl
 
 
 @register("mediapipe")
