@@ -2,7 +2,7 @@
 segmentation:
   name: auto                       # Daugman for iris-filling close-ups, learned small_160 otherwise
   params: {model: seg_small_160.onnx, closeup_frac: 0.40, rmax_frac: 0.6}
-quality: {}                        # replace with results/quality/calibrated_thresholds.json after re-calibrating on A-EYE photos
+quality: {model_path: models/quality_model.json}   # learned gate (bench/quality.py); re-fit on A-EYE photos
 normalization: {n_r: 64, n_t: 512, mirror_left: false}
 color: {model_path: models/color_model.json, uncertain_margin: 0.15}
 markings:

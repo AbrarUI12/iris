@@ -52,6 +52,8 @@ def main():
     ap.add_argument("--dec", type=int, default=32)
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--max_train", type=int, default=0)
+    ap.add_argument("--repeat", nargs="*", default=[], help="dataset:k oversampling, e.g. upol_pseudo:4")
+    ap.add_argument("--init", default=None, help="state_dict to start from (fine-tuning)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     torch.set_num_threads(a.threads)
@@ -64,10 +66,15 @@ def main():
     va = read_manifest(a.manifest, "val", a.datasets)
     if a.max_train:
         tr = tr[: a.max_train]
+    for spec in a.repeat:
+        ds, k = spec.split(":")
+        tr += [r for r in tr if r["dataset"] == ds] * (int(k) - 1)
     dl_tr = DataLoader(SegDataset(tr, a.root, a.size, True), batch_size=a.bs, shuffle=True,
                        num_workers=0, drop_last=True)
     dl_va = DataLoader(SegDataset(va, a.root, a.size, False), batch_size=32, num_workers=0)
     model = IrisSegNet(a.backbone, True, a.dec)
+    if a.init:
+        model.load_state_dict(torch.load(a.init))
     print(f"train {len(tr)} val {len(va)} params {n_params(model)/1e6:.2f}M", flush=True)
     enc = [p for n, p in model.named_parameters() if n.startswith("features")]
     rest = [p for n, p in model.named_parameters() if not n.startswith("features")]

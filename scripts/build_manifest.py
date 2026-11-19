@@ -145,9 +145,20 @@ def upol():
     return rows
 
 
+def upol_pseudo():
+    """Daugman pseudo-labels on UPOL TRAIN images that passed strict QC
+    (scripts/pseudo_label_upol.py). Train split only, by construction."""
+    lp = Path("data/labels/upol_pseudo.csv")
+    if not lp.exists():
+        return []
+    return [dict(id=r["id"], dataset="upol_pseudo", image=r["image"], iris_mask=r["iris_mask"],
+                 pupil_mask=r["pupil_mask"], subject=r["subject"], split="train", eye="")
+            for r in csv.DictReader(open(lp))]
+
+
 def main():
     rows = []
-    for fn in (nir_pupil_eye_iris, synthetic_eyes, upol):
+    for fn in (nir_pupil_eye_iris, synthetic_eyes, upol, upol_pseudo):
         try:
             r = fn()
         except StopIteration:

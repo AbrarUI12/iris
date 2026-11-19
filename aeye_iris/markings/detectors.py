@@ -280,9 +280,36 @@ def fibre_orientation(norm: NormalizedIris, method: str = "structure_tensor", **
     return {"radial_index": round(glob, 3), "per_sector": per_sector, "method": method}
 
 
+def _solidity(m: np.ndarray) -> float:
+    cnts, _ = cv2.findContours(m.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return 0.0
+    c = max(cnts, key=cv2.contourArea)
+    hull = cv2.contourArea(cv2.convexHull(c))
+    return float(m.sum() / hull) if hull > 0 else 1.0
+
+
+def strict_filter(cands: list[Candidate], k: float, score_gain: float = 1.25,
+                  min_solidity: float = 0.6, max_per_eye: int = 3) -> list[Candidate]:
+    """Precision-oriented post-filter: the candidate's MEAN score must be well above the
+    detection threshold, the region compact (not a ragged texture fragment), and at most
+    `max_per_eye` strongest candidates are kept."""
+    keep = [c for c in cands if c.score >= score_gain * k and _solidity(c.mask) >= min_solidity]
+    return sorted(keep, key=lambda c: -c.score)[:max_per_eye]
+
+
+def _with_strict(fn):
+    def wrapped(norm, method, k=3.0, strict=False, **P):
+        c = fn(norm, method, k=k, **P)
+        return strict_filter(c, k) if strict else c
+    wrapped.__name__ = fn.__name__
+    wrapped.__doc__ = fn.__doc__
+    return wrapped
+
+
 DETECTORS = {
-    "dark_pigmentation": (dark_pigment, ("bgsub", "deltaE", "mser")),
-    "white_marking": (white_marking, ("deltaL", "tophat")),
-    "lacuna": (lacuna, ("blackhat", "dog")),
-    "contraction_furrow": (furrows, ("ridge", "gabor")),
+    "dark_pigmentation": (_with_strict(dark_pigment), ("bgsub", "deltaE", "mser")),
+    "white_marking": (_with_strict(white_marking), ("deltaL", "tophat")),
+    "lacuna": (_with_strict(lacuna), ("blackhat", "dog")),
+    "contraction_furrow": (_with_strict(furrows), ("ridge", "gabor")),
 }

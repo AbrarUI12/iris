@@ -28,8 +28,7 @@ from synth.degrade import KINDS, degrade
 from train.dataset import read_manifest
 
 _S = {}
-FEATS = ["focus_lap_global", "tenengrad_global", "mean_l", "clip_high", "clip_low", "glare_global",
-         "iris_radius_px", "visible_frac", "glare_iris", "focus_lap_iris", "tenengrad_iris", "seg_ok"]
+from aeye_iris.quality import MODEL_FEATS as FEATS, QualityModel  # noqa: E402
 
 
 def _one(args):
@@ -144,19 +143,43 @@ def main():
     summary.append({"degradation": "ORIGINAL (false retake rate)",
                     "default_recall_s1": float(np.mean([r["gate_default"] for r in orig])),
                     "calibrated_recall_s1": float(np.mean([rule_gate(r, t_cal) for r in orig]))})
-    # logistic on all metrics, trained on val, tested on test
+    # logistic on all metrics, trained on VAL, threshold for <=10% false retakes on VAL originals,
+    # exported as the production gate model; evaluated on TEST
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import roc_auc_score
-    def X(rows):
-        m = np.array([[r[f] for f in FEATS] for r in rows], float)
-        m = np.nan_to_num(m, nan=0.0)
-        m[:, [0, 1, 9, 10]] = np.log1p(np.maximum(m[:, [0, 1, 9, 10]], 0))
-        return m
+    X = lambda rows: np.array([QualityModel.vector(r) for r in rows])  # noqa: E731
     Xv, yv = X(res["val"]), np.array([r["label"] for r in res["val"]])
     mu, sd = Xv.mean(0), Xv.std(0) + 1e-6
-    clf = LogisticRegression(max_iter=3000, C=1.0, class_weight="balanced").fit((Xv - mu) / sd, yv)
-    pt = clf.predict_proba((X(test) - mu) / sd)[:, 1]
-    summary.append({"degradation": "ALL (logistic, AUC)", "auc_logistic": float(roc_auc_score(y, pt)),
+    clf = LogisticRegression(max_iter=5000, C=1.0, class_weight="balanced").fit((Xv - mu) / sd, yv)
+    pv = clf.predict_proba((Xv - mu) / sd)[:, 1]
+    thr = float(np.quantile(pv[yv == 0], 0.90))
+    model = {"features": FEATS, "mu": mu.tolist(), "sd": sd.tolist(), "coef": clf.coef_[0].tolist(),
+             "intercept": float(clf.intercept_[0]), "threshold": thr,
+             "note": "trained on synthetic degradations of UPOL+synthetic val images; re-fit on A-EYE photos"}
+    Path("models").mkdir(exist_ok=True)
+    Path("models/quality_model.json").write_text(json.dumps(model, indent=1))
+    qm = QualityModel(model)
+    pt = np.array([qm.score(r)[0] for r in test])
+    sev = np.array([r["severity"] for r in test])
+    kinds = np.array([r["kind"] for r in test])
+    for d in summary:
+        k = d["degradation"]
+        if k in KINDS:
+            d["model_recall_s1"] = float((pt[(kinds == k) & (sev == 1.0)] >= thr).mean())
+            d["model_recall_s0.5"] = float((pt[(kinds == k) & (sev == 0.5)] >= thr).mean())
+    summary[-1]["model_recall_s1"] = float((pt[kinds == "original"] >= thr).mean())
+
+    def prf_row(name, pred):
+        tp = int(((pred == 1) & (y == 1)).sum()); fp = int(((pred == 1) & (y == 0)).sum())
+        fn = int(((pred == 0) & (y == 1)).sum()); tn = int(((pred == 0) & (y == 0)).sum())
+        P = tp / max(tp + fp, 1); R = tp / max(tp + fn, 1)
+        return {"degradation": f"OVERALL {name}", "precision": P, "recall": R,
+                "f1": 2 * P * R / max(P + R, 1e-9), "false_retake_rate": fp / max(fp + tn, 1),
+                "accuracy": (tp + tn) / len(y)}
+    summary.append(prf_row("default rules", np.array([r["gate_default"] for r in test])))
+    summary.append(prf_row("calibrated rules", np.array([rule_gate(r, t_cal) for r in test])))
+    summary.append(prf_row("logistic model (shipped)", (pt >= thr).astype(int)))
+    summary.append({"degradation": "ALL (AUC)", "auc_logistic": float(roc_auc_score(y, pt)),
                     "auc_calibrated_rules": float(roc_auc_score(y, [rule_gate(r, t_cal) for r in test]))})
     write_csv(out / "summary.csv", summary)
     for s in summary:

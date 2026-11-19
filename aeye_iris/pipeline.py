@@ -39,7 +39,17 @@ class Pipeline:
         self.cfg = config
         s = config["segmentation"]
         self.seg = build(s["name"], **s.get("params", {}))
-        self.qt = QualityThresholds(**config.get("quality", {}))
+        qcfg = dict(config.get("quality", {}))
+        qm_path = qcfg.pop("model_path", None)
+        self.qt = QualityThresholds(**qcfg)
+        self.qmodel = None
+        if qm_path:
+            mp = Path(qm_path)
+            if not mp.exists():
+                mp = Path(__file__).resolve().parents[1] / qm_path
+            if mp.exists():
+                from .quality import QualityModel
+                self.qmodel = QualityModel.load(mp)
         n = config.get("normalization", {})
         self.n_r, self.n_t = n.get("n_r", 64), n.get("n_t", 512)
         self.mirror_left = n.get("mirror_left", False)
@@ -66,7 +76,7 @@ class Pipeline:
         t0 = time.perf_counter()
         seg = self.seg(bgr)
         t["segmentation"] = (time.perf_counter() - t0) * 1000
-        q = assess(bgr, seg, self.qt)
+        q = assess(bgr, seg, self.qt, self.qmodel)
         t["quality"] = (time.perf_counter() - t0) * 1000 - t["segmentation"]
         obs = EyeObservation(image_id=image_id, eye_side=eye_side, quality=q, timings_ms=t)
         if not seg.ok:

@@ -34,8 +34,9 @@ from synth.markings import inject
 from train.dataset import load_label, read_manifest
 
 KS = (2.0, 2.5, 3.0, 3.5, 4.0)
+STRICT = (False, True)
 STRENGTHS = (0.5, 1.0)
-NORMS = ((64, 512), (32, 256))
+NORMS = ((64, 512),)  # 32x256 was worse for every marking in round 1 (results kept in git history)
 
 
 def gt_seg(lab: np.ndarray) -> SegResult | None:
@@ -49,7 +50,7 @@ def gt_seg(lab: np.ndarray) -> SegResult | None:
 
 
 def _one(args):
-    row, root, seed = args
+    row, root, seed, split = args
     cv2.setNumThreads(1)
     img = cv2.imread(str(Path(root) / row["image"]))
     if row.get("iris_mask"):
@@ -69,38 +70,41 @@ def _one(args):
         base = norm.image.copy()
         for kind, (fn, methods) in DETECTORS.items():
             # clean image FP
-            for m, k in itertools.product(methods, KS):
+            for m, k, st in itertools.product(methods, KS, STRICT):
                 norm.image = base
                 t0 = time.perf_counter()
-                c = fn(norm, m, k=k)
+                c = fn(norm, m, k=k, strict=st)
                 ms = (time.perf_counter() - t0) * 1000
-                out.append(dict(kind=kind, method=m, k=k, strength=0.0, norm=f"{n_r}x{n_t}",
-                                tp=0, fp=len(c), fn=0, ms=ms, id=row["id"]))
+                out.append(dict(kind=kind, method=m, k=k, strict=st, strength=0.0, norm=f"{n_r}x{n_t}",
+                                tp=0, fp=len(c), fn=0, ms=ms, id=row["id"], split=split))
             for s in STRENGTHS:
                 inj, gmask, params = inject(base, norm.valid, kind, rng, s)
                 if not gmask.any():
                     continue
-                for m, k in itertools.product(methods, KS):
+                for m, k, st in itertools.product(methods, KS, STRICT):
                     norm.image = inj
-                    c = fn(norm, m, k=k)
+                    c = fn(norm, m, k=k, strict=st)
                     # a detection overlapping the injected mask is a TP; others are FP
                     hit = [iou(cc.mask, gmask) for cc in c]
                     tp = int(any(h >= 0.1 for h in hit))
-                    out.append(dict(kind=kind, method=m, k=k, strength=s, norm=f"{n_r}x{n_t}",
+                    out.append(dict(kind=kind, method=m, k=k, strict=st, strength=s, norm=f"{n_r}x{n_t}",
                                     tp=tp, fp=len(c) - tp, fn=1 - tp,
-                                    loc_iou=max(hit) if tp else np.nan, id=row["id"]))
+                                    loc_iou=max(hit) if tp else np.nan, id=row["id"], split=split))
         norm.image = base
     return out
 
 
 def summarize(rows):
+    """Plain metrics. Precision counts EVERY non-matching detection on an injected image as a
+    false positive (some may be genuine natural markings in the real host iris, so this is a
+    lower bound on true precision)."""
     by = {}
     for r in rows:
-        by.setdefault((r["kind"], r["method"], r["k"], r["norm"]), []).append(r)
+        by.setdefault((r["split"], r["kind"], r["method"], r["k"], r["strict"]), []).append(r)
     out = []
-    for (kind, m, k, nm), rs in sorted(by.items()):
+    for (split, kind, m, k, st), rs in sorted(by.items(), key=lambda x: str(x[0])):
         clean = [r for r in rs if r["strength"] == 0]
-        d = {"kind": kind, "method": m, "k": k, "norm": nm,
+        d = {"split": split, "kind": kind, "method": m, "k": k, "strict": st,
              "fp_per_clean_image": float(np.mean([r["fp"] for r in clean])) if clean else np.nan,
              "ms_mean": float(np.mean([r["ms"] for r in clean])) if clean else np.nan}
         for s in STRENGTHS:
@@ -108,17 +112,26 @@ def summarize(rows):
             if not inj:
                 continue
             tp = sum(r["tp"] for r in inj)
+            fp = sum(r["fp"] for r in inj)
             fn = sum(r["fn"] for r in inj)
-            # precision vs injected only counts FP beyond the clean-image baseline
-            fp_extra = max(0.0, sum(r["fp"] for r in inj) - d["fp_per_clean_image"] * len(inj))
-            p, rec, f = prf(tp, fp_extra, fn)
-            d[f"recall@s{s}"] = rec
-            d[f"precision_excess@s{s}"] = p
+            p, rec, f = prf(tp, fp, fn)
+            d[f"precision@s{s}"], d[f"recall@s{s}"], d[f"f1@s{s}"] = p, rec, f
             d[f"loc_iou@s{s}"] = float(np.nanmean([r.get("loc_iou", np.nan) for r in inj])) if tp else np.nan
-        # operating-point summary: recall at full strength vs FP on clean real irises
-        d["score"] = d.get("recall@s1.0", 0) - 0.1 * d["fp_per_clean_image"]
         out.append(d)
     return out
+
+
+def select_on_val(summary):
+    """Per marking: (method, k, strict) with the best F1 at full strength on VAL hosts;
+    returns the matching TEST rows (the reported numbers)."""
+    chosen = []
+    for kind in sorted({d["kind"] for d in summary}):
+        val = [d for d in summary if d["split"] == "val" and d["kind"] == kind]
+        best = max(val, key=lambda d: (d.get("f1@s1.0", 0), -d["fp_per_clean_image"]))
+        test = next(d for d in summary if d["split"] == "test" and d["kind"] == kind and d["method"] == best["method"]
+                    and d["k"] == best["k"] and d["strict"] == best["strict"])
+        chosen.append({**test, "val_f1@s1.0": best.get("f1@s1.0")})
+    return chosen
 
 
 def synthetic_struct(n: int = 60):
@@ -168,14 +181,15 @@ def main():
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    rows = read_manifest(a.manifest, a.split, a.datasets)
-    rng = np.random.default_rng(0)
-    rows = [rows[i] for i in sorted(rng.choice(len(rows), min(a.limit, len(rows)), replace=False))]
     t0 = time.time()
     res = []
-    with ProcessPoolExecutor(a.workers) as ex:
-        for r in ex.map(_one, [(r, a.root, i) for i, r in enumerate(rows)], chunksize=4):
-            res += r
+    for split in ("val", "test"):
+        rows = read_manifest(a.manifest, split, a.datasets)
+        rng = np.random.default_rng(0)
+        rows = [rows[i] for i in sorted(rng.choice(len(rows), min(a.limit, len(rows)), replace=False))]
+        with ProcessPoolExecutor(a.workers) as ex:
+            for r in ex.map(_one, [(r, a.root, i, split) for i, r in enumerate(rows)], chunksize=4):
+                res += r
     print(f"injection runs: {len(res)} in {time.time()-t0:.0f}s", flush=True)
     write_csv(out / "injection_raw.csv", res)
     s = summarize(res)
@@ -184,14 +198,10 @@ def main():
     write_csv(out / "structure_summary.csv", ss)
     for x in ss:
         print(json.dumps(x))
-    best = {}
-    for d in s:
-        if d["norm"] != "64x512":
-            continue
-        if d["kind"] not in best or d["score"] > best[d["kind"]]["score"]:
-            best[d["kind"]] = d
-    for k, d in best.items():
-        print(k, json.dumps({kk: (round(v, 3) if isinstance(v, float) else v) for kk, v in d.items()}))
+    chosen = select_on_val(s)
+    write_csv(out / "selected_test.csv", chosen)
+    for d in chosen:
+        print(json.dumps({kk: (round(v, 3) if isinstance(v, float) else v) for kk, v in d.items()}))
 
 
 if __name__ == "__main__":

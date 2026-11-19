@@ -54,10 +54,28 @@ def _tenengrad(g: np.ndarray, mask: np.ndarray | None = None) -> float:
     return float(np.sqrt(t.mean()))
 
 
+def blockiness(gray: np.ndarray) -> float:
+    """JPEG artefact score: mean |horizontal+vertical| step across 8x8 block boundaries
+    divided by the mean step elsewhere (~1.0 for clean images, >1 for blocky ones).
+    Must be computed at ORIGINAL resolution (resizing destroys the 8-px grid)."""
+    g = gray.astype(np.float32)
+    dx = np.abs(np.diff(g, axis=1))
+    dy = np.abs(np.diff(g, axis=0))
+    bx = dx[:, 7::8].mean() if dx.shape[1] > 8 else 0.0
+    by = dy[7::8, :].mean() if dy.shape[0] > 8 else 0.0
+    mx = np.ones(dx.shape[1], bool)
+    mx[7::8] = False
+    my = np.ones(dy.shape[0], bool)
+    my[7::8] = False
+    inner = (dx[:, mx].mean() + dy[my, :].mean()) / 2 + 1e-3
+    return float(((bx + by) / 2) / inner)
+
+
 def image_metrics(bgr: np.ndarray) -> dict[str, float]:
     small, _ = resize_max(bgr, 320)
     g = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
     return {
+        "blockiness": blockiness(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)),
         "focus_lap_global": _lap_var(g),
         "tenengrad_global": _tenengrad(g),
         "mean_l": float(g.mean()),
@@ -112,7 +130,81 @@ def precheck(bgr: np.ndarray, t: QualityThresholds = QualityThresholds()) -> Qua
     return QualityOut(status=status, reasons=reasons, metrics={k: round(v, 4) for k, v in m.items()})
 
 
-def assess(bgr: np.ndarray, seg: SegResult, t: QualityThresholds = QualityThresholds()) -> QualityOut:
+MODEL_FEATS = ["focus_lap_global", "tenengrad_global", "mean_l", "clip_high", "clip_low", "glare_global",
+               "iris_radius_px", "visible_frac", "glare_iris", "focus_lap_iris", "tenengrad_iris", "seg_ok",
+               "blockiness"]
+LOG_FEATS = {"focus_lap_global", "tenengrad_global", "focus_lap_iris", "tenengrad_iris"}
+MODEL_REASON = {  # feature -> user-facing retake message when the learned score fires
+    "focus_lap_global": "image not sharp enough: hold steady and tap to focus on the eye",
+    "focus_lap_iris": "iris detail not sharp enough: move slightly closer / refocus",
+    "tenengrad_iris": "iris detail not sharp enough: move slightly closer / refocus",
+    "tenengrad_global": "image not sharp enough: hold steady and tap to focus on the eye",
+    "blockiness": "image is heavily compressed: send the original photo, not a screenshot/forward",
+    "glare_iris": "reflections cover the iris: change the light angle",
+    "glare_global": "strong reflections: avoid direct light into the eye",
+    "mean_l": "lighting is too dark or too bright",
+    "clip_high": "overexposed: avoid flash / direct light",
+    "clip_low": "too dark: use more indirect light",
+    "visible_frac": "iris partly covered: open the eye wider",
+    "iris_radius_px": "iris too small: move the camera closer",
+    "seg_ok": "iris not found: centre one open eye in the frame",
+}
+
+
+class QualityModel:
+    """Logistic quality score (numpy inference) exported by bench/quality.py."""
+
+    def __init__(self, d: dict):
+        self.d = d
+        self.mu, self.sd = np.array(d["mu"]), np.array(d["sd"])
+        self.coef, self.b = np.array(d["coef"]), float(d["intercept"])
+        self.thr = float(d["threshold"])
+
+    @classmethod
+    def load(cls, path):
+        import json
+        from pathlib import Path
+        return cls(json.loads(Path(path).read_text()))
+
+    @staticmethod
+    def vector(m: dict) -> np.ndarray:
+        v = np.array([float(m.get(f, 0.0)) if np.isfinite(m.get(f, 0.0)) else 0.0 for f in MODEL_FEATS])
+        for i, f in enumerate(MODEL_FEATS):
+            if f in LOG_FEATS:
+                v[i] = np.log1p(max(v[i], 0.0))
+        return v
+
+    def score(self, m: dict) -> tuple[float, str]:
+        z = (self.vector(m) - self.mu) / self.sd
+        contrib = self.coef * z
+        p = 1 / (1 + np.exp(-(contrib.sum() + self.b)))
+        worst = MODEL_FEATS[int(np.argmax(contrib))]
+        return float(p), worst
+
+
+def assess(bgr: np.ndarray, seg: SegResult, t: QualityThresholds = QualityThresholds(),
+           model: "QualityModel | None" = None) -> QualityOut:
+    """Rule gate (explainable). With `model`, the learned score decides retake vs accept
+    (better recall incl. JPEG, threshold set for ~10% false retakes on validation); the
+    rule reasons are still reported, and a reason is derived from the top contributing
+    feature when only the model fires."""
+    q = _assess_rules(bgr, seg, t)
+    if model is None or not seg.ok:
+        return q
+    p, worst = model.score(q.metrics)
+    q.metrics["quality_risk"] = round(p, 4)
+    if p >= model.thr:
+        if q.status != "retake":
+            q.reasons = [MODEL_REASON.get(worst, "photo quality too low: please retake")]
+        q.status = "retake"
+        q.color_assessable = q.fine_markings_assessable = False
+    elif q.status == "retake":  # rules fired but the calibrated model says the photo is usable
+        q.status = "review"
+        q.reasons = [f"borderline quality ({r})" for r in q.reasons]
+    return q
+
+
+def _assess_rules(bgr: np.ndarray, seg: SegResult, t: QualityThresholds = QualityThresholds()) -> QualityOut:
     pre = precheck(bgr, t)
     m = dict(pre.metrics)
     reasons = list(pre.reasons)
