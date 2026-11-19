@@ -1,21 +1,46 @@
-# Full two-eye pipelines compared end-to-end (markings = injection-benchmark winners)
-_markings: &mk
-  dark_pigmentation: {method: deltaE, k: 3.5}
-  white_marking: {method: deltaL, k: 2.5}
-  lacuna: {method: dog, k: 2.0}
-  contraction_furrow: {method: ridge, k: 4.0}
-  collarette: {method: gradient}
-  fibre_type: {method: structure_tensor, threshold: 0.2}
+_markings: &id001
+  dark_pigmentation:
+    method: deltaE
+    k: 3.5
+  white_marking:
+    method: deltaL
+    k: 2.5
+  lacuna:
+    method: dog
+    k: 2.0
+  contraction_furrow:
+    method: ridge
+    k: 4.0
+  collarette:
+    method: gradient
+  fibre_type:
+    method: structure_tensor
+    threshold: 0.2
 pipelines:
+  auto_default:
+    segmentation:
+      name: auto
+      params:
+        model: seg_small_160.onnx
+    color:
+      model_path: models/color_model.json
+    markings: *id001
   classical_daugman:
-    segmentation: {name: daugman, params: {channel: red, clahe: true, inpaint: true, rmax_frac: 0.6}}
-    color: {model_path: models/color_model.json}
-    markings: *mk
-  hybrid_int8:
-    segmentation: {name: hybrid, params: {model: seg_small_224_int8.onnx, limbus: search}}
-    color: {model_path: models/color_model.json}
-    markings: *mk
-  learned_int8:
-    segmentation: {name: onnx, params: {model: seg_small_224_int8.onnx}}
-    color: {model_path: models/color_model.json}
-    markings: *mk
+    segmentation:
+      name: daugman
+      params:
+        channel: red
+        clahe: true
+        inpaint: true
+        rmax_frac: 0.6
+    color:
+      model_path: models/color_model.json
+    markings: *id001
+  learned_small160:
+    segmentation:
+      name: onnx
+      params:
+        model: seg_small_160.onnx
+    color:
+      model_path: models/color_model.json
+    markings: *id001

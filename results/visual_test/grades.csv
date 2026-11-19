@@ -1,0 +1,5 @@
+config,pass_count,n,fail_tiles,note
+daugman|channel=red|clahe=True|inpaint=True|rmax_frac=0.6,28,30,7 22,22: pupil oversized; 21/29 pupil slightly loose
+onnx|model=seg_small_160.onnx,0,30,all,pupil mostly right; limbus underestimated (real high-res texture / iris-filling framing)
+hybrid|model=seg_small_160.onnx|limbus=search,27,30,15 20 22,failures follow wrong model pupil
+auto|model=seg_small_160.onnx,28,30,7 22,selects Daugman on all close-ups (closeup_frac>=0.40)

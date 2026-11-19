@@ -252,3 +252,33 @@ class MediaPipeIris:
             if lid.sum() > 0.3 * res.iris_mask.sum():
                 res.iris_mask = (res.iris_mask & lid).astype(np.uint8)
         return res
+
+
+@register("auto")
+class AutoSeg:
+    """Framing-aware selector (thresholds from VALIDATION splits, see BENCHMARK.md):
+    Daugman runs first; if its iris radius is >= `closeup_frac` of the short image side the
+    photo is an iris-filling close-up and the classical result is kept (the learned model,
+    trained on whole-eye framing + zoom augmentation, underestimates the limbus there).
+    Otherwise the learned model is used (much better with eyelids/periocular framing)."""
+
+    def __init__(self, model: str = "seg_small_160.onnx", rmax_frac: float = 0.6,
+                 closeup_frac: float = 0.40, threads: int = 1):
+        from .classical import Daugman
+        self.learned = OnnxSeg(model=model, threads=threads)
+        self.classical = Daugman(channel="red", clahe=True, inpaint=True, rmax_frac=rmax_frac)
+        self.closeup_frac = closeup_frac
+        self.name = "auto"
+
+    def __call__(self, bgr: np.ndarray) -> SegResult:
+        b = self.classical(bgr)
+        frac = b.iris.r / min(bgr.shape[:2]) if b.ok else 0.0
+        if b.ok and frac >= self.closeup_frac:
+            r = b
+        else:
+            r = self.learned(bgr)
+            if not r.ok:
+                r = b
+        r.method = f"auto->{r.method}"
+        r.extra = {**r.extra, "closeup_frac": round(frac, 3)}
+        return r

@@ -45,8 +45,12 @@ class Pipeline:
         self.mirror_left = n.get("mirror_left", False)
         c = config.get("color", {})
         self.color_model = None
-        if c.get("model_path") and Path(c["model_path"]).exists():
-            self.color_model = LearnedColor.load(c["model_path"])
+        if c.get("model_path"):
+            mp = Path(c["model_path"])
+            if not mp.exists():
+                mp = Path(__file__).resolve().parents[1] / c["model_path"]
+            if mp.exists():
+                self.color_model = LearnedColor.load(mp)
         self.color_margin = c.get("uncertain_margin", 0.15)
         self.zones = ZoneMap.load(config["zone_map"]) if config.get("zone_map") else ZoneMap()
         self.mk = config.get("markings", {})

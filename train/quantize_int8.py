@@ -10,8 +10,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 import onnxruntime as ort
-from onnxruntime.quantization import (CalibrationDataReader, QuantFormat, QuantType,
+from onnxruntime.quantization import (CalibrationDataReader, CalibrationMethod, QuantFormat, QuantType,
                                       quantize_static)
+import onnx
 from onnxruntime.quantization.shape_inference import quant_pre_process
 
 from .dataset import read_manifest
@@ -49,9 +50,18 @@ def main():
     pre = src.with_name(src.stem + "_pre.onnx")
     quant_pre_process(str(src), str(pre))
     dst = src.with_name(src.stem + "_int8.onnx")
+    # keep the input normalisation (Sub/Div) and the output head/upsampling in float:
+    # they carry large-range activations that wreck MinMax/percentile scales
+    g = onnx.load(str(pre)).graph
+    ops = [(n.name, n.op_type) for n in g.node]
+    excl = [n for n, t in ops[:4] if t in ("Sub", "Div", "Mul", "Add")]
+    convs = [n for n, t in ops if t == "Conv"]
+    excl += convs[-2:] + [n for n, t in ops if t in ("Resize",)][-2:]
     quantize_static(str(pre), str(dst), Reader(rows, a.root, size, inp.name),
-                    quant_format=QuantFormat.QDQ, per_channel=True,
-                    activation_type=QuantType.QUInt8, weight_type=QuantType.QInt8)
+                    quant_format=QuantFormat.QDQ, per_channel=True, reduce_range=True,
+                    activation_type=QuantType.QUInt8, weight_type=QuantType.QInt8,
+                    calibrate_method=CalibrationMethod.Percentile, nodes_to_exclude=excl,
+                    extra_options={"CalibPercentile": 99.99})
     pre.unlink()
     print("wrote", dst, f"{dst.stat().st_size/1e6:.2f} MB (fp32 {src.stat().st_size/1e6:.2f} MB)")
 

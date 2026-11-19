@@ -1,0 +1,3 @@
+tag,dataset,n,dice_iris_mean,dice_iris_median,fail_rate_dice<0.8,e1_mean,hd95_median,dice_pupil_mean,pupil_center_err_median,ms_p50,ms_p95,seg_ok_rate
+auto|model=seg_small_160.onnx,nir_eye,340,0.91277,0.94295,0.07059,0.01597,9.5851,0.91701,0.02314,52.39497,66.04541,1.0
+auto|model=seg_small_160.onnx,synth_eyes,414,0.77854,0.89936,0.2971,0.05576,10.00871,0.75894,0.07388,29.268,32.42904,1.0
