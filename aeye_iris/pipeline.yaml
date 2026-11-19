@@ -1,0 +1,14 @@
+# Default pipeline configuration (updated from benchmark results: see results/BENCHMARK.md)
+segmentation:
+  name: daugman
+  params: {channel: red, inpaint: true, occl: true}
+quality: {}
+normalization: {n_r: 64, n_t: 512, mirror_left: false}
+color: {uncertain_margin: 0.15}
+markings:
+  dark_pigmentation: {method: bgsub, k: 3.0}
+  white_marking: {method: deltaL, k: 3.0}
+  lacuna: {method: blackhat, k: 2.5}
+  contraction_furrow: {method: ridge, k: 3.0}
+  collarette: {method: gradient}
+  fibre_type: {method: structure_tensor, threshold: 0.2}

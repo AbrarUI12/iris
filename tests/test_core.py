@@ -1,0 +1,105 @@
+import json
+
+import numpy as np
+import pytest
+
+from aeye_iris.geometry import Ellipse, ellipse_from_mask, ransac_ellipse
+from aeye_iris.normalize import normalize, polar_maps
+from aeye_iris.types import SegResult
+from aeye_iris.zones import ZoneMap
+from synth.eye import render_eye
+
+
+def test_ellipse_mask_roundtrip():
+    e = Ellipse(100, 80, 40, 30, 20)
+    f = ellipse_from_mask(e.to_mask((200, 220)))
+    assert abs(f.cx - 100) < 1 and abs(f.cy - 80) < 1
+    assert abs(max(f.a, f.b) - 40) < 1.5 and abs(min(f.a, f.b) - 30) < 1.5
+
+
+def test_ransac_rejects_outliers():
+    rng = np.random.default_rng(0)
+    phi = rng.uniform(0, 2 * np.pi, 80)
+    xs, ys = 50 + 20 * np.cos(phi), 60 + 20 * np.sin(phi)
+    xs[:15] += rng.uniform(5, 20, 15)
+    e = ransac_ellipse(xs, ys, tol=1.0)
+    assert abs(e.cx - 50) < 1 and abs(e.r - 20) < 1
+
+
+@pytest.mark.parametrize("col,expected", [(0, 12), (511, 12), (20, 12), (22, 1), (64, 2), (128, 3), (256, 6), (384, 9)])
+def test_sector_clock_convention(col, expected):
+    # 512 columns; sector 12 spans 11:30-12:30 (cols -21.3..21.3), 3 o'clock at col 128
+    assert ZoneMap.sector_of_col(col, 512) == expected
+
+
+def test_rings():
+    z = ZoneMap()
+    assert z.ring_of_row(0, 64) == "inner"
+    assert z.ring_of_row(32, 64) == "middle"
+    assert z.ring_of_row(63, 64) == "outer"
+
+
+def test_polar_maps_orientation():
+    p, i = Ellipse.circle(100, 100, 20), Ellipse.circle(100, 100, 60)
+    mx, my = polar_maps(p, i, 8, 360)
+    # column 0 = 12 o'clock: straight up (smaller y)
+    assert abs(mx[-1, 0] - 100) < 1 and my[-1, 0] < 50
+    # column 90 = 3 o'clock (right side of photo)
+    assert mx[-1, 90] > 150 and abs(my[-1, 90] - 100) < 1
+    # left eye mirrored
+    mx2, _ = polar_maps(p, i, 8, 360, eye_side="left", mirror_left=True)
+    assert mx2[-1, 90] < 50
+
+
+def test_normalize_valid_fraction():
+    img, gt = render_eye(seed=3)
+    seg = SegResult(gt["pupil"], gt["iris"], gt["iris_mask"], gt["pupil_mask"])
+    n = normalize(img, seg, 32, 256)
+    assert n.image.shape == (32, 256, 3)
+    assert 0.6 < n.valid.mean() <= 1.0
+
+
+@pytest.mark.parametrize("name", ["daugman", "hough", "raycast"])
+def test_classical_segmenters_run(name):
+    from aeye_iris.segment import build
+    img, gt = render_eye(seed=4)
+    r = build(name)(img)
+    assert r.ok
+    assert abs(r.iris.cx - gt["iris"].cx) < 0.15 * gt["iris"].r
+
+
+def test_fibre_orientation_sign():
+    from aeye_iris.markings.detectors import fibre_orientation
+    for fibre, sign in (("radial", 1), ("transverse", -1)):
+        img, gt = render_eye(seed=5, fibre=fibre, glare=False)
+        n = normalize(img, SegResult(gt["pupil"], gt["iris"], gt["iris_mask"], gt["pupil_mask"]))
+        assert np.sign(fibre_orientation(n)["radial_index"]) == sign
+
+
+@pytest.mark.parametrize("kind", ["dark_pigmentation", "white_marking", "lacuna", "contraction_furrow"])
+def test_injected_marking_detected(kind):
+    from aeye_iris.markings.detectors import DETECTORS
+    from bench.metrics import iou
+    from synth.markings import inject
+    img, gt = render_eye(seed=6, glare=False, lid_cover=0.0)
+    n = normalize(img, SegResult(gt["pupil"], gt["iris"], gt["iris_mask"], gt["pupil_mask"]))
+    rng = np.random.default_rng(1)
+    n.image, gmask, _ = inject(n.image, n.valid, kind, rng, strength=1.0)
+    fn, methods = DETECTORS[kind]
+    cands = fn(n, methods[0], k=2.5)
+    assert max((iou(c.mask, gmask) for c in cands), default=0) > 0.1
+
+
+def test_pipeline_schema_and_determinism(tmp_path):
+    from aeye_iris.pipeline import Pipeline
+    a, _ = render_eye(seed=4)
+    b, _ = render_eye(seed=7, color="blue")
+    p = Pipeline()
+    o1 = p.analyze({"left": a, "right": b}).model_dump(exclude={"eyes": {"__all__": {"timings_ms"}}})
+    o2 = p.analyze({"left": a, "right": b}).model_dump(exclude={"eyes": {"__all__": {"timings_ms"}}})
+    assert json.dumps(o1, sort_keys=True, default=str) == json.dumps(o2, sort_keys=True, default=str)
+    assert {e["eye_side"] for e in o1["eyes"]} == {"left", "right"}
+    for e in o1["eyes"]:
+        kinds = {m["marking_type"] for m in e["markings"]}
+        assert kinds == {"dark_pigmentation", "white_marking", "lacuna", "contraction_furrow",
+                         "collarette", "fibre_type"}

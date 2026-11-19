@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aeye-iris"
+version = "0.1.0"
+description = "A-EYE iris image pipeline: quality gate, segmentation, normalization, color, 12x3 zones, marking candidates"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "opencv-python-headless>=4.9",
+  "scipy>=1.11",
+  "scikit-image>=0.22",
+  "pydantic>=2.5",
+  "pyyaml>=6",
+  "onnxruntime>=1.17",
+]
+
+[project.optional-dependencies]
+bench = ["scikit-learn>=1.4", "matplotlib>=3.8", "pandas>=2.1"]
+train = ["torch>=2.2", "torchvision>=0.17", "onnx>=1.15"]
+mediapipe = ["mediapipe>=0.10"]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["aeye_iris*"]
+
+[tool.setuptools.package-data]
+aeye_iris = ["pipeline.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
