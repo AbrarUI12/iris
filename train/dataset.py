@@ -35,8 +35,9 @@ def load_label(row: dict, root: Path) -> np.ndarray:
 
 class SegDataset(Dataset):
     def __init__(self, rows: list[dict], root: str | Path, size: int = 224, augment: bool = False,
-                 cache: bool = True):
+                 cache: bool = True, zoom_p: float = 0.55):
         self.rows, self.root, self.size, self.augment = rows, Path(root), size, augment
+        self.zoom_p = zoom_p
         self._cache = {} if cache else None
 
     def __len__(self):
@@ -50,8 +51,8 @@ class SegDataset(Dataset):
         lab = load_label(r, self.root)
         if lab.shape != img.shape[:2]:
             lab = cv2.resize(lab, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
-        # cache at 2x training size to save memory while keeping aug quality
-        s = (2 * self.size) / max(img.shape[:2])
+        # cache at 3x training size: iris-centred zoom-in needs the extra resolution
+        s = (3 * self.size) / max(img.shape[:2])
         if s < 1:
             img = cv2.resize(img, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
             lab = cv2.resize(lab, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
@@ -61,15 +62,35 @@ class SegDataset(Dataset):
 
     def _aug(self, img, lab, rng):
         h, w = img.shape[:2]
-        # geometric: scale, rotate, translate
-        sc = rng.uniform(0.8, 1.25)
         ang = rng.uniform(-15, 15)
-        M = cv2.getRotationMatrix2D((w / 2, h / 2), ang, sc)
-        M[:, 2] += rng.uniform(-0.1, 0.1, 2) * (w, h)
-        img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-        lab = cv2.warpAffine(lab, M, (w, h), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_REFLECT)
+        union = (lab > 0).astype(np.uint8)
+        if rng.random() < self.zoom_p and union.sum() > 50:
+            # iris-centred zoom: covers macro close-ups where the iris FILLS the frame
+            # (A-EYE capture, clinical iris cameras), not only periocular framing
+            (cx, cy), R = cv2.minEnclosingCircle(cv2.findNonZero(union))
+            target = rng.uniform(0.25, 0.9) * min(h, w) / 2
+            sc = max(1.0, target / max(R, 1.0))  # zoom IN only (zoom-out tiles mirrored eyes)
+            M = cv2.getRotationMatrix2D((cx, cy), ang, sc)
+            M[:, 2] += (w / 2 - cx, h / 2 - cy)
+            M[:, 2] += rng.uniform(-0.12, 0.12, 2) * (w, h)
+        else:
+            sc = rng.uniform(0.8, 1.25)
+            M = cv2.getRotationMatrix2D((w / 2, h / 2), ang, sc)
+            M[:, 2] += rng.uniform(-0.1, 0.1, 2) * (w, h)
+        img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+        lab = cv2.warpAffine(lab, M, (w, h), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
         if rng.random() < 0.5:
             img, lab = img[:, ::-1], lab[:, ::-1]
+        if rng.random() < 0.2:
+            # circular aperture vignette (macro lens / clinical iris camera look)
+            yy, xx = np.mgrid[0:h, 0:w]
+            rr = rng.uniform(0.45, 0.75) * max(h, w)
+            cxv, cyv = w / 2 + rng.uniform(-0.1, 0.1) * w, h / 2 + rng.uniform(-0.1, 0.1) * h
+            out = np.hypot(xx - cxv, yy - cyv) > rr
+            img = img.copy()
+            img[out] = 0
+            lab = lab.copy()
+            lab[out] = 0
         # photometric: brightness/contrast/gamma/hue/white balance, blur, noise, jpeg
         f = img.astype(np.float32)
         f = f * rng.uniform(0.6, 1.4) + rng.uniform(-25, 25)

@@ -39,9 +39,10 @@ def main():
     ap.add_argument("--manifest", default="data/manifest.csv")
     ap.add_argument("--dataset", default="upol")
     ap.add_argument("--n", type=int, default=24)
+    ap.add_argument("--split", default="test")
     ap.add_argument("--out", default="results/visual")
     a = ap.parse_args()
-    rows = read_manifest(a.manifest, "test", [a.dataset])
+    rows = read_manifest(a.manifest, a.split, [a.dataset])
     rng = np.random.default_rng(0)
     rows = [rows[i] for i in sorted(rng.choice(len(rows), min(a.n, len(rows)), replace=False))]
     out = Path(a.out)

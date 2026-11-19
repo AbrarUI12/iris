@@ -1,0 +1,5 @@
+tag,dataset,n,dice_iris_mean,dice_iris_median,fail_rate_dice<0.8,e1_mean,hd95_median,dice_pupil_mean,pupil_center_err_median,ms_p50,ms_p95,seg_ok_rate
+hybrid|model=seg_small_224.onnx,nir_eye,340,0.90368,0.94907,0.15294,0.01322,8.358,0.88021,0.04183,37.40608,50.51176,1.0
+hybrid|model=seg_small_224.onnx,synth_eyes,414,0.77503,0.89787,0.29952,0.04435,10.1258,0.76218,0.06485,23.50888,31.38153,1.0
+onnx|model=seg_small_224.onnx,nir_eye,340,0.91421,0.95412,0.13824,0.01215,7.64,0.92788,0.01866,21.44631,28.66852,1.0
+onnx|model=seg_small_224.onnx,synth_eyes,414,0.79015,0.91147,0.27536,0.04304,8.595,0.7735,0.05187,11.65859,15.1748,1.0
