@@ -154,34 +154,36 @@ def main():
                table(read("visual_test/grades.csv"), ["config", "pass_count", "n", "fail_tiles", "note"]), ""]
     q = read("quality/summary.csv")
     if q:
+        per = [r for r in q if not str(r["degradation"]).startswith(("OVERALL", "ALL", "ORIGINAL"))]
+        orig = [r for r in q if str(r["degradation"]).startswith("ORIGINAL")]
         md += ["## 3. Capture-quality gate (synthetic degradations of held-out real images)", "",
-               table(q, ["degradation", "default_recall_s1", "default_recall_s0.5", "calibrated_recall_s1",
-                         "calibrated_recall_s0.5", "auc_focus_lap_iris", "auc_logistic", "auc_calibrated_rules"],
-                     ["degradation", "default gate recall (sev 1)", "(sev .5)", "calibrated recall (sev 1)", "(sev .5)",
-                      "AUC iris focus", "AUC logistic", "AUC calibrated rules"]), ""]
+               "Recall = share of degraded photos sent back for retake (severity 1 / 0.5).", "",
+               table(per + orig, ["degradation", "calibrated_recall_s1", "calibrated_recall_s0.5", "model_recall_s1",
+                                  "model_recall_s0.5", "auc_blockiness", "auc_focus_lap_iris"],
+                     ["degradation", "rules recall (sev 1)", "(sev .5)", "**learned gate** recall (sev 1)", "(sev .5)",
+                      "AUC blockiness", "AUC iris focus"]), "",
+               "Overall (positive = 'retake'):", "",
+               table([r for r in q if str(r["degradation"]).startswith("OVERALL")],
+                     ["degradation", "precision", "recall", "f1", "false_retake_rate", "accuracy"]), ""]
     c = read("color/summary.csv")
     if c:
         st = json.loads((R / "color/stability.json").read_text()) if (R / "color/stability.json").exists() else {}
         md += ["## 4. Iris colour (pilot hand labels, subject-grouped 5-fold CV)", "",
                table(c[:12], ["feature", "model", "margin", "macro_f1", "accuracy", "uncertain_rate", "f1_on_decided"]), "",
                f"Same-eye stability (share of an eye's images given its majority class): `{json.dumps(st.get('majority_agreement', {}))}`", ""]
-    m = read("markings/injection_summary.csv")
-    if m:
-        best = {}
-        for d in m:
-            if d["norm"] != "64x512":
-                continue
-            if d["kind"] not in best or d["score"] > best[d["kind"]]["score"]:
-                best[d["kind"]] = d
+    m = [d for d in read("markings/injection_summary.csv") if d.get("split") == "test"]
+    sel = read("markings/selected_test.csv")
+    if sel:
+        cols = ["kind", "method", "k", "strict", "precision@s1.0", "recall@s1.0", "f1@s1.0", "fp_per_clean_image",
+                "recall@s0.5", "loc_iou@s1.0", "ms_mean"]
         md += ["## 5. Marking candidates (SYNTHETIC injection into real UPOL irises)", "",
                "> These numbers measure whether a detector finds an injected marking of known size/contrast "
                "in real iris texture. They are **not** agreement with a practitioner and must not be read as clinical accuracy.", "",
-               "Best operating point per marking (64x512 normalisation, score = recall@full strength − 0.1 × FP per clean image):", "",
-               table(list(best.values()), ["kind", "method", "k", "recall@s1.0", "recall@s0.5", "fp_per_clean_image",
-                                           "loc_iou@s1.0", "ms_mean"]), "",
-               "<details><summary>All marking configs</summary>", "",
-               table(m, ["kind", "method", "k", "norm", "recall@s1.0", "recall@s0.5", "fp_per_clean_image", "loc_iou@s1.0", "ms_mean"]),
-               "", "</details>", ""]
+               "Operating point per marking chosen by F1 on **validation** hosts (60 irises), reported on **test** hosts (126 irises). "
+               "Precision counts every extra detection on the injected image as a false positive (lower bound: some are real natural markings).", "",
+               table(sel, cols), "",
+               "<details><summary>All marking configs (test hosts)</summary>", "",
+               table(m, cols), "", "</details>", ""]
     s = read("markings/structure_summary.csv")
     if s:
         md += ["### Collarette radius & fibre orientation (procedural eyes, known truth)", "",

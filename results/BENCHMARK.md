@@ -237,17 +237,26 @@ Validation (24 images, used for tuning):
 
 ## 3. Capture-quality gate (synthetic degradations of held-out real images)
 
-| degradation | default gate recall (sev 1) | (sev .5) | calibrated recall (sev 1) | (sev .5) | AUC iris focus | AUC logistic | AUC calibrated rules |
-|---|---|---|---|---|---|---|---|
-| defocus | 0.740 | 0.640 | 0.780 | 0.760 | 0.909 |  |  |
-| motion | 0.570 | 0.440 | 0.700 | 0.670 | 0.818 |  |  |
-| dark | 1.000 | 0.970 | 1.000 | 1.000 | 0.978 |  |  |
-| overexposed | 0.930 | 0.900 | 0.990 | 0.980 | 0.815 |  |  |
-| glare | 0.290 | 0.130 | 0.980 | 0.600 | 0.501 |  |  |
-| jpeg | 0.200 | 0.150 | 0.090 | 0.110 | 0.797 |  |  |
-| lowres | 0.660 | 0.390 | 0.770 | 0.770 | 0.904 |  |  |
-| ORIGINAL (false retake rate) | 0.090 |  | 0.160 |  |  |  |  |
-| ALL (logistic, AUC) |  |  |  |  |  | 0.907 | 0.784 |
+Recall = share of degraded photos sent back for retake (severity 1 / 0.5).
+
+| degradation | rules recall (sev 1) | (sev .5) | **learned gate** recall (sev 1) | (sev .5) | AUC blockiness | AUC iris focus |
+|---|---|---|---|---|---|---|
+| defocus | 0.780 | 0.760 | 1.000 | 1.000 | 0.548 | 0.909 |
+| motion | 0.700 | 0.670 | 0.980 | 0.920 | 0.563 | 0.818 |
+| dark | 1.000 | 1.000 | 1.000 | 1.000 | 0.525 | 0.978 |
+| overexposed | 0.990 | 0.980 | 0.960 | 0.950 | 0.523 | 0.815 |
+| glare | 0.980 | 0.600 | 0.950 | 0.480 | 0.511 | 0.501 |
+| jpeg | 0.090 | 0.110 | 1.000 | 0.980 | 1.000 | 0.797 |
+| lowres | 0.770 | 0.770 | 1.000 | 1.000 | 0.513 | 0.904 |
+| ORIGINAL (false retake rate) | 0.160 |  | 0.090 |  |  |  |
+
+Overall (positive = 'retake'):
+
+| degradation | precision | recall | f1 | false_retake_rate | accuracy |
+|---|---|---|---|---|---|
+| OVERALL default rules | 0.989 | 0.572 | 0.725 | 0.090 | 0.595 |
+| OVERALL calibrated rules | 0.985 | 0.729 | 0.837 | 0.160 | 0.736 |
+| OVERALL logistic model (shipped) | 0.993 | 0.944 | 0.968 | 0.090 | 0.942 |
 
 ## 4. Iris colour (pilot hand labels, subject-grouped 5-fold CV)
 
@@ -272,109 +281,109 @@ Same-eye stability (share of an eye's images given its majority class): `{"learn
 
 > These numbers measure whether a detector finds an injected marking of known size/contrast in real iris texture. They are **not** agreement with a practitioner and must not be read as clinical accuracy.
 
-Best operating point per marking (64x512 normalisation, score = recall@full strength − 0.1 × FP per clean image):
+Operating point per marking chosen by F1 on **validation** hosts (60 irises), reported on **test** hosts (126 irises). Precision counts every extra detection on the injected image as a false positive (lower bound: some are real natural markings).
 
-| kind | method | k | recall@s1.0 | recall@s0.5 | fp_per_clean_image | loc_iou@s1.0 | ms_mean |
-|---|---|---|---|---|---|---|---|
-| contraction_furrow | ridge | 4.000 | 1.000 | 0.786 | 0.921 | 0.780 | 3.304 |
-| dark_pigmentation | deltaE | 3.500 | 0.667 | 0.111 | 0.548 | 0.569 | 47.557 |
-| lacuna | dog | 2.000 | 0.825 | 0.198 | 1.111 | 0.743 | 19.394 |
-| white_marking | deltaL | 2.500 | 0.913 | 0.571 | 0.476 | 0.609 | 32.102 |
+| kind | method | k | strict | precision@s1.0 | recall@s1.0 | f1@s1.0 | fp_per_clean_image | recall@s0.5 | loc_iou@s1.0 | ms_mean |
+|---|---|---|---|---|---|---|---|---|---|---|
+| contraction_furrow | ridge | 4.000 | True | 0.581 | 0.992 | 0.733 | 0.730 | 0.595 | 0.781 | 3.221 |
+| dark_pigmentation | deltaE | 4.000 | False | 0.685 | 0.603 | 0.641 | 0.278 | 0.040 | 0.553 | 46.057 |
+| lacuna | dog | 2.500 | True | 0.864 | 0.603 | 0.710 | 0.111 | 0.040 | 0.708 | 18.986 |
+| white_marking | deltaL | 3.000 | False | 0.755 | 0.881 | 0.813 | 0.262 | 0.468 | 0.606 | 31.709 |
 
-<details><summary>All marking configs</summary>
+<details><summary>All marking configs (test hosts)</summary>
 
-| kind | method | k | norm | recall@s1.0 | recall@s0.5 | fp_per_clean_image | loc_iou@s1.0 | ms_mean |
-|---|---|---|---|---|---|---|---|---|
-| contraction_furrow | gabor | 2.000 | 32x256 | 1.000 | 0.984 | 2.706 | 0.645 | 1.420 |
-| contraction_furrow | gabor | 2.000 | 64x512 | 0.992 | 0.992 | 5.317 | 0.561 | 3.633 |
-| contraction_furrow | gabor | 2.500 | 32x256 | 1.000 | 0.937 | 1.976 | 0.684 | 1.180 |
-| contraction_furrow | gabor | 2.500 | 64x512 | 0.992 | 0.992 | 4.032 | 0.606 | 3.114 |
-| contraction_furrow | gabor | 3.000 | 32x256 | 1.000 | 0.841 | 1.484 | 0.703 | 1.116 |
-| contraction_furrow | gabor | 3.000 | 64x512 | 0.992 | 0.976 | 3.333 | 0.650 | 2.921 |
-| contraction_furrow | gabor | 3.500 | 32x256 | 1.000 | 0.698 | 1.127 | 0.687 | 1.049 |
-| contraction_furrow | gabor | 3.500 | 64x512 | 0.992 | 0.968 | 2.730 | 0.693 | 2.822 |
-| contraction_furrow | gabor | 4.000 | 32x256 | 0.992 | 0.492 | 0.921 | 0.648 | 1.036 |
-| contraction_furrow | gabor | 4.000 | 64x512 | 0.992 | 0.929 | 2.206 | 0.728 | 2.770 |
-| contraction_furrow | ridge | 2.000 | 32x256 | 0.992 | 0.968 | 2.032 | 0.686 | 1.364 |
-| contraction_furrow | ridge | 2.000 | 64x512 | 0.984 | 0.968 | 3.302 | 0.615 | 4.076 |
-| contraction_furrow | ridge | 2.500 | 32x256 | 1.000 | 0.865 | 1.373 | 0.708 | 1.312 |
-| contraction_furrow | ridge | 2.500 | 64x512 | 0.992 | 0.976 | 2.460 | 0.672 | 3.734 |
-| contraction_furrow | ridge | 3.000 | 32x256 | 1.000 | 0.667 | 0.952 | 0.703 | 1.234 |
-| contraction_furrow | ridge | 3.000 | 64x512 | 1.000 | 0.944 | 1.738 | 0.720 | 3.497 |
-| contraction_furrow | ridge | 3.500 | 32x256 | 0.984 | 0.516 | 0.738 | 0.655 | 1.222 |
-| contraction_furrow | ridge | 3.500 | 64x512 | 1.000 | 0.873 | 1.175 | 0.756 | 3.348 |
-| contraction_furrow | ridge | 4.000 | 32x256 | 0.944 | 0.389 | 0.524 | 0.597 | 1.230 |
-| contraction_furrow | ridge | 4.000 | 64x512 | 1.000 | 0.786 | 0.921 | 0.780 | 3.304 |
-| dark_pigmentation | bgsub | 2.000 | 32x256 | 0.881 | 0.302 | 5.381 | 0.439 | 6.161 |
-| dark_pigmentation | bgsub | 2.000 | 64x512 | 0.810 | 0.230 | 6.929 | 0.533 | 17.955 |
-| dark_pigmentation | bgsub | 2.500 | 32x256 | 0.603 | 0.056 | 2.063 | 0.401 | 5.962 |
-| dark_pigmentation | bgsub | 2.500 | 64x512 | 0.635 | 0.071 | 2.913 | 0.528 | 17.263 |
-| dark_pigmentation | bgsub | 3.000 | 32x256 | 0.413 | 0.000 | 0.817 | 0.345 | 5.833 |
-| dark_pigmentation | bgsub | 3.000 | 64x512 | 0.500 | 0.032 | 1.389 | 0.506 | 16.877 |
-| dark_pigmentation | bgsub | 3.500 | 32x256 | 0.238 | 0.000 | 0.286 | 0.273 | 5.813 |
-| dark_pigmentation | bgsub | 3.500 | 64x512 | 0.302 | 0.024 | 0.683 | 0.511 | 16.636 |
-| dark_pigmentation | bgsub | 4.000 | 32x256 | 0.095 | 0.000 | 0.190 | 0.221 | 5.846 |
-| dark_pigmentation | bgsub | 4.000 | 64x512 | 0.206 | 0.000 | 0.365 | 0.497 | 16.673 |
-| dark_pigmentation | deltaE | 2.000 | 32x256 | 0.817 | 0.476 | 4.079 | 0.550 | 16.893 |
-| dark_pigmentation | deltaE | 2.000 | 64x512 | 0.754 | 0.444 | 3.190 | 0.583 | 47.632 |
-| dark_pigmentation | deltaE | 2.500 | 32x256 | 0.786 | 0.286 | 1.786 | 0.546 | 16.642 |
-| dark_pigmentation | deltaE | 2.500 | 64x512 | 0.722 | 0.310 | 1.667 | 0.579 | 47.321 |
-| dark_pigmentation | deltaE | 3.000 | 32x256 | 0.730 | 0.143 | 0.865 | 0.536 | 16.723 |
-| dark_pigmentation | deltaE | 3.000 | 64x512 | 0.698 | 0.175 | 0.952 | 0.574 | 47.615 |
-| dark_pigmentation | deltaE | 3.500 | 32x256 | 0.675 | 0.063 | 0.524 | 0.505 | 16.656 |
-| dark_pigmentation | deltaE | 3.500 | 64x512 | 0.667 | 0.111 | 0.548 | 0.569 | 47.557 |
-| dark_pigmentation | deltaE | 4.000 | 32x256 | 0.587 | 0.048 | 0.325 | 0.472 | 16.465 |
-| dark_pigmentation | deltaE | 4.000 | 64x512 | 0.603 | 0.040 | 0.278 | 0.553 | 47.222 |
-| dark_pigmentation | mser | 2.000 | 32x256 | 0.444 | 0.063 | 2.262 | 0.584 | 7.392 |
-| dark_pigmentation | mser | 2.000 | 64x512 | 0.373 | 0.008 | 1.579 | 0.595 | 20.367 |
-| dark_pigmentation | mser | 2.500 | 32x256 | 0.444 | 0.063 | 2.063 | 0.572 | 7.303 |
-| dark_pigmentation | mser | 2.500 | 64x512 | 0.373 | 0.008 | 1.373 | 0.590 | 19.645 |
-| dark_pigmentation | mser | 3.000 | 32x256 | 0.437 | 0.056 | 1.722 | 0.562 | 7.336 |
-| dark_pigmentation | mser | 3.000 | 64x512 | 0.365 | 0.008 | 1.063 | 0.590 | 19.677 |
-| dark_pigmentation | mser | 3.500 | 32x256 | 0.437 | 0.056 | 1.302 | 0.524 | 7.389 |
-| dark_pigmentation | mser | 3.500 | 64x512 | 0.365 | 0.008 | 0.849 | 0.577 | 19.569 |
-| dark_pigmentation | mser | 4.000 | 32x256 | 0.429 | 0.032 | 0.976 | 0.487 | 7.415 |
-| dark_pigmentation | mser | 4.000 | 64x512 | 0.325 | 0.000 | 0.651 | 0.591 | 19.491 |
-| lacuna | blackhat | 2.000 | 32x256 | 0.825 | 0.397 | 3.683 | 0.613 | 6.565 |
-| lacuna | blackhat | 2.000 | 64x512 | 0.881 | 0.373 | 6.325 | 0.688 | 18.986 |
-| lacuna | blackhat | 2.500 | 32x256 | 0.746 | 0.254 | 1.508 | 0.572 | 6.574 |
-| lacuna | blackhat | 2.500 | 64x512 | 0.810 | 0.198 | 2.683 | 0.721 | 18.481 |
-| lacuna | blackhat | 3.000 | 32x256 | 0.556 | 0.111 | 0.651 | 0.523 | 6.526 |
-| lacuna | blackhat | 3.000 | 64x512 | 0.635 | 0.119 | 1.421 | 0.716 | 18.228 |
-| lacuna | blackhat | 3.500 | 32x256 | 0.357 | 0.040 | 0.286 | 0.526 | 6.423 |
-| lacuna | blackhat | 3.500 | 64x512 | 0.476 | 0.071 | 0.754 | 0.696 | 18.040 |
-| lacuna | blackhat | 4.000 | 32x256 | 0.214 | 0.024 | 0.190 | 0.594 | 6.392 |
-| lacuna | blackhat | 4.000 | 64x512 | 0.317 | 0.040 | 0.429 | 0.693 | 17.983 |
-| lacuna | dog | 2.000 | 32x256 | 0.921 | 0.389 | 1.659 | 0.537 | 7.115 |
-| lacuna | dog | 2.000 | 64x512 | 0.825 | 0.198 | 1.111 | 0.743 | 19.394 |
-| lacuna | dog | 2.500 | 32x256 | 0.817 | 0.190 | 0.389 | 0.425 | 7.130 |
-| lacuna | dog | 2.500 | 64x512 | 0.635 | 0.056 | 0.151 | 0.700 | 19.117 |
-| lacuna | dog | 3.000 | 32x256 | 0.579 | 0.095 | 0.056 | 0.367 | 7.051 |
-| lacuna | dog | 3.000 | 64x512 | 0.405 | 0.008 | 0.032 | 0.665 | 19.792 |
-| lacuna | dog | 3.500 | 32x256 | 0.230 | 0.016 | 0.032 | 0.429 | 6.974 |
-| lacuna | dog | 3.500 | 64x512 | 0.214 | 0.000 | 0.008 | 0.664 | 19.073 |
-| lacuna | dog | 4.000 | 32x256 | 0.159 | 0.008 | 0.008 | 0.415 | 6.990 |
-| lacuna | dog | 4.000 | 64x512 | 0.111 | 0.000 | 0.000 | 0.677 | 18.965 |
-| white_marking | deltaL | 2.000 | 32x256 | 1.000 | 0.825 | 0.643 | 0.590 | 11.208 |
-| white_marking | deltaL | 2.000 | 64x512 | 0.929 | 0.683 | 0.984 | 0.607 | 32.345 |
-| white_marking | deltaL | 2.500 | 32x256 | 1.000 | 0.611 | 0.286 | 0.582 | 11.156 |
-| white_marking | deltaL | 2.500 | 64x512 | 0.913 | 0.571 | 0.476 | 0.609 | 32.102 |
-| white_marking | deltaL | 3.000 | 32x256 | 0.992 | 0.484 | 0.127 | 0.571 | 11.138 |
-| white_marking | deltaL | 3.000 | 64x512 | 0.881 | 0.468 | 0.262 | 0.606 | 32.153 |
-| white_marking | deltaL | 3.500 | 32x256 | 0.952 | 0.373 | 0.079 | 0.537 | 11.123 |
-| white_marking | deltaL | 3.500 | 64x512 | 0.825 | 0.357 | 0.198 | 0.606 | 32.240 |
-| white_marking | deltaL | 4.000 | 32x256 | 0.865 | 0.286 | 0.056 | 0.525 | 11.125 |
-| white_marking | deltaL | 4.000 | 64x512 | 0.746 | 0.302 | 0.119 | 0.608 | 32.018 |
-| white_marking | tophat | 2.000 | 32x256 | 0.992 | 0.810 | 9.929 | 0.562 | 1.114 |
-| white_marking | tophat | 2.000 | 64x512 | 0.960 | 0.786 | 13.627 | 0.579 | 3.762 |
-| white_marking | tophat | 2.500 | 32x256 | 0.984 | 0.675 | 4.468 | 0.570 | 0.860 |
-| white_marking | tophat | 2.500 | 64x512 | 0.937 | 0.690 | 6.492 | 0.592 | 2.991 |
-| white_marking | tophat | 3.000 | 32x256 | 0.976 | 0.548 | 2.048 | 0.561 | 0.728 |
-| white_marking | tophat | 3.000 | 64x512 | 0.897 | 0.563 | 3.325 | 0.594 | 2.627 |
-| white_marking | tophat | 3.500 | 32x256 | 0.952 | 0.476 | 0.968 | 0.547 | 0.664 |
-| white_marking | tophat | 3.500 | 64x512 | 0.849 | 0.476 | 2.056 | 0.597 | 2.316 |
-| white_marking | tophat | 4.000 | 32x256 | 0.889 | 0.389 | 0.476 | 0.528 | 0.634 |
-| white_marking | tophat | 4.000 | 64x512 | 0.786 | 0.413 | 1.278 | 0.597 | 2.207 |
+| kind | method | k | strict | precision@s1.0 | recall@s1.0 | f1@s1.0 | fp_per_clean_image | recall@s0.5 | loc_iou@s1.0 | ms_mean |
+|---|---|---|---|---|---|---|---|---|---|---|
+| contraction_furrow | gabor | 2.000 | False | 0.149 | 0.992 | 0.259 | 5.317 | 0.992 | 0.561 | 3.347 |
+| contraction_furrow | gabor | 2.000 | True | 0.337 | 0.992 | 0.503 | 2.667 | 0.913 | 0.561 | 3.414 |
+| contraction_furrow | gabor | 2.500 | False | 0.188 | 0.992 | 0.316 | 4.032 | 0.992 | 0.606 | 2.999 |
+| contraction_furrow | gabor | 2.500 | True | 0.344 | 0.992 | 0.511 | 2.516 | 0.913 | 0.606 | 3.070 |
+| contraction_furrow | gabor | 3.000 | False | 0.221 | 0.992 | 0.362 | 3.333 | 0.976 | 0.650 | 2.820 |
+| contraction_furrow | gabor | 3.000 | True | 0.351 | 0.992 | 0.519 | 2.381 | 0.929 | 0.650 | 2.926 |
+| contraction_furrow | gabor | 3.500 | False | 0.257 | 0.992 | 0.408 | 2.730 | 0.968 | 0.693 | 2.720 |
+| contraction_furrow | gabor | 3.500 | True | 0.382 | 0.992 | 0.552 | 2.016 | 0.897 | 0.693 | 2.798 |
+| contraction_furrow | gabor | 4.000 | False | 0.296 | 0.992 | 0.456 | 2.206 | 0.929 | 0.728 | 2.686 |
+| contraction_furrow | gabor | 4.000 | True | 0.411 | 0.992 | 0.581 | 1.603 | 0.841 | 0.728 | 2.711 |
+| contraction_furrow | ridge | 2.000 | False | 0.236 | 0.984 | 0.380 | 3.302 | 0.968 | 0.615 | 3.874 |
+| contraction_furrow | ridge | 2.000 | True | 0.362 | 0.976 | 0.528 | 2.286 | 0.921 | 0.618 | 4.043 |
+| contraction_furrow | ridge | 2.500 | False | 0.295 | 0.992 | 0.455 | 2.460 | 0.976 | 0.672 | 3.551 |
+| contraction_furrow | ridge | 2.500 | True | 0.402 | 0.992 | 0.572 | 1.825 | 0.929 | 0.672 | 3.660 |
+| contraction_furrow | ridge | 3.000 | False | 0.364 | 1.000 | 0.534 | 1.738 | 0.944 | 0.720 | 3.379 |
+| contraction_furrow | ridge | 3.000 | True | 0.479 | 1.000 | 0.648 | 1.238 | 0.849 | 0.720 | 3.458 |
+| contraction_furrow | ridge | 3.500 | False | 0.450 | 1.000 | 0.621 | 1.175 | 0.873 | 0.756 | 3.290 |
+| contraction_furrow | ridge | 3.500 | True | 0.532 | 0.992 | 0.693 | 0.889 | 0.738 | 0.755 | 3.309 |
+| contraction_furrow | ridge | 4.000 | False | 0.496 | 1.000 | 0.663 | 0.921 | 0.786 | 0.780 | 3.165 |
+| contraction_furrow | ridge | 4.000 | True | 0.581 | 0.992 | 0.733 | 0.730 | 0.595 | 0.781 | 3.221 |
+| dark_pigmentation | bgsub | 2.000 | False | 0.107 | 0.810 | 0.189 | 6.929 | 0.230 | 0.533 | 17.227 |
+| dark_pigmentation | bgsub | 2.000 | True | 0.233 | 0.532 | 0.324 | 2.063 | 0.071 | 0.566 | 17.051 |
+| dark_pigmentation | bgsub | 2.500 | False | 0.184 | 0.635 | 0.286 | 2.913 | 0.071 | 0.528 | 16.463 |
+| dark_pigmentation | bgsub | 2.500 | True | 0.354 | 0.405 | 0.378 | 0.778 | 0.024 | 0.555 | 16.507 |
+| dark_pigmentation | bgsub | 3.000 | False | 0.272 | 0.500 | 0.352 | 1.389 | 0.032 | 0.506 | 16.262 |
+| dark_pigmentation | bgsub | 3.000 | True | 0.400 | 0.175 | 0.243 | 0.254 | 0.000 | 0.556 | 16.231 |
+| dark_pigmentation | bgsub | 3.500 | False | 0.311 | 0.302 | 0.306 | 0.683 | 0.024 | 0.511 | 16.068 |
+| dark_pigmentation | bgsub | 3.500 | True | 0.414 | 0.095 | 0.155 | 0.127 | 0.000 | 0.560 | 16.093 |
+| dark_pigmentation | bgsub | 4.000 | False | 0.361 | 0.206 | 0.263 | 0.365 | 0.000 | 0.497 | 16.046 |
+| dark_pigmentation | bgsub | 4.000 | True | 0.364 | 0.032 | 0.058 | 0.056 | 0.000 | 0.598 | 15.933 |
+| dark_pigmentation | deltaE | 2.000 | False | 0.194 | 0.754 | 0.309 | 3.190 | 0.444 | 0.583 | 46.252 |
+| dark_pigmentation | deltaE | 2.000 | True | 0.380 | 0.730 | 0.500 | 1.429 | 0.333 | 0.585 | 46.298 |
+| dark_pigmentation | deltaE | 2.500 | False | 0.307 | 0.722 | 0.431 | 1.667 | 0.310 | 0.579 | 45.644 |
+| dark_pigmentation | deltaE | 2.500 | True | 0.457 | 0.675 | 0.545 | 0.944 | 0.183 | 0.587 | 45.801 |
+| dark_pigmentation | deltaE | 3.000 | False | 0.438 | 0.698 | 0.538 | 0.952 | 0.175 | 0.574 | 45.930 |
+| dark_pigmentation | deltaE | 3.000 | True | 0.577 | 0.651 | 0.612 | 0.508 | 0.063 | 0.581 | 46.057 |
+| dark_pigmentation | deltaE | 3.500 | False | 0.556 | 0.667 | 0.607 | 0.548 | 0.111 | 0.569 | 46.206 |
+| dark_pigmentation | deltaE | 3.500 | True | 0.644 | 0.516 | 0.573 | 0.302 | 0.040 | 0.590 | 46.158 |
+| dark_pigmentation | deltaE | 4.000 | False | 0.685 | 0.603 | 0.641 | 0.278 | 0.040 | 0.553 | 46.057 |
+| dark_pigmentation | deltaE | 4.000 | True | 0.695 | 0.325 | 0.443 | 0.151 | 0.008 | 0.599 | 45.660 |
+| dark_pigmentation | mser | 2.000 | False | 0.194 | 0.373 | 0.255 | 1.579 | 0.008 | 0.595 | 19.553 |
+| dark_pigmentation | mser | 2.000 | True | 0.603 | 0.278 | 0.380 | 0.198 | 0.000 | 0.614 | 19.213 |
+| dark_pigmentation | mser | 2.500 | False | 0.215 | 0.373 | 0.272 | 1.373 | 0.008 | 0.590 | 19.284 |
+| dark_pigmentation | mser | 2.500 | True | 0.571 | 0.127 | 0.208 | 0.087 | 0.000 | 0.590 | 19.340 |
+| dark_pigmentation | mser | 3.000 | False | 0.257 | 0.365 | 0.302 | 1.063 | 0.008 | 0.590 | 19.089 |
+| dark_pigmentation | mser | 3.000 | True | 0.615 | 0.063 | 0.115 | 0.032 | 0.000 | 0.618 | 19.066 |
+| dark_pigmentation | mser | 3.500 | False | 0.305 | 0.365 | 0.332 | 0.849 | 0.008 | 0.577 | 19.030 |
+| dark_pigmentation | mser | 3.500 | True | 1.000 | 0.040 | 0.076 | 0.000 | 0.000 | 0.615 | 19.133 |
+| dark_pigmentation | mser | 4.000 | False | 0.339 | 0.325 | 0.332 | 0.651 | 0.000 | 0.591 | 19.182 |
+| dark_pigmentation | mser | 4.000 | True | 1.000 | 0.016 | 0.031 | 0.000 | 0.000 | 0.677 | 19.297 |
+| lacuna | blackhat | 2.000 | False | 0.128 | 0.881 | 0.223 | 6.325 | 0.373 | 0.688 | 18.748 |
+| lacuna | blackhat | 2.000 | True | 0.376 | 0.770 | 0.505 | 1.500 | 0.175 | 0.724 | 18.883 |
+| lacuna | blackhat | 2.500 | False | 0.241 | 0.810 | 0.371 | 2.683 | 0.198 | 0.721 | 18.131 |
+| lacuna | blackhat | 2.500 | True | 0.486 | 0.667 | 0.562 | 0.802 | 0.111 | 0.760 | 17.930 |
+| lacuna | blackhat | 3.000 | False | 0.320 | 0.635 | 0.426 | 1.421 | 0.119 | 0.716 | 17.651 |
+| lacuna | blackhat | 3.000 | True | 0.570 | 0.484 | 0.524 | 0.421 | 0.040 | 0.750 | 17.653 |
+| lacuna | blackhat | 3.500 | False | 0.400 | 0.476 | 0.435 | 0.754 | 0.071 | 0.696 | 17.427 |
+| lacuna | blackhat | 3.500 | True | 0.607 | 0.294 | 0.396 | 0.198 | 0.032 | 0.749 | 17.392 |
+| lacuna | blackhat | 4.000 | False | 0.426 | 0.317 | 0.364 | 0.429 | 0.040 | 0.693 | 17.321 |
+| lacuna | blackhat | 4.000 | True | 0.625 | 0.159 | 0.253 | 0.103 | 0.016 | 0.769 | 17.317 |
+| lacuna | dog | 2.000 | False | 0.443 | 0.825 | 0.576 | 1.111 | 0.198 | 0.743 | 18.908 |
+| lacuna | dog | 2.000 | True | 0.545 | 0.810 | 0.652 | 0.770 | 0.151 | 0.749 | 18.774 |
+| lacuna | dog | 2.500 | False | 0.816 | 0.635 | 0.714 | 0.151 | 0.056 | 0.700 | 18.541 |
+| lacuna | dog | 2.500 | True | 0.864 | 0.603 | 0.710 | 0.111 | 0.040 | 0.708 | 18.986 |
+| lacuna | dog | 3.000 | False | 0.944 | 0.405 | 0.567 | 0.032 | 0.008 | 0.665 | 18.672 |
+| lacuna | dog | 3.000 | True | 0.933 | 0.333 | 0.491 | 0.024 | 0.008 | 0.700 | 18.701 |
+| lacuna | dog | 3.500 | False | 0.964 | 0.214 | 0.351 | 0.008 | 0.000 | 0.664 | 18.601 |
+| lacuna | dog | 3.500 | True | 0.958 | 0.183 | 0.307 | 0.008 | 0.000 | 0.692 | 18.630 |
+| lacuna | dog | 4.000 | False | 1.000 | 0.111 | 0.200 | 0.000 | 0.000 | 0.677 | 18.369 |
+| lacuna | dog | 4.000 | True | 1.000 | 0.095 | 0.174 | 0.000 | 0.000 | 0.709 | 18.622 |
+| white_marking | deltaL | 2.000 | False | 0.487 | 0.929 | 0.639 | 0.984 | 0.683 | 0.607 | 31.669 |
+| white_marking | deltaL | 2.000 | True | 0.689 | 0.913 | 0.785 | 0.484 | 0.571 | 0.610 | 31.401 |
+| white_marking | deltaL | 2.500 | False | 0.653 | 0.913 | 0.762 | 0.476 | 0.571 | 0.609 | 31.570 |
+| white_marking | deltaL | 2.500 | True | 0.786 | 0.873 | 0.827 | 0.270 | 0.460 | 0.611 | 31.520 |
+| white_marking | deltaL | 3.000 | False | 0.755 | 0.881 | 0.813 | 0.262 | 0.468 | 0.606 | 31.709 |
+| white_marking | deltaL | 3.000 | True | 0.821 | 0.802 | 0.811 | 0.167 | 0.325 | 0.612 | 31.257 |
+| white_marking | deltaL | 3.500 | False | 0.794 | 0.825 | 0.809 | 0.198 | 0.357 | 0.606 | 31.356 |
+| white_marking | deltaL | 3.500 | True | 0.856 | 0.659 | 0.744 | 0.119 | 0.278 | 0.619 | 31.402 |
+| white_marking | deltaL | 4.000 | False | 0.862 | 0.746 | 0.800 | 0.119 | 0.302 | 0.608 | 31.598 |
+| white_marking | deltaL | 4.000 | True | 0.945 | 0.548 | 0.693 | 0.040 | 0.198 | 0.619 | 31.365 |
+| white_marking | tophat | 2.000 | False | 0.067 | 0.960 | 0.125 | 13.627 | 0.786 | 0.579 | 3.686 |
+| white_marking | tophat | 2.000 | True | 0.340 | 0.937 | 0.499 | 2.524 | 0.635 | 0.580 | 3.846 |
+| white_marking | tophat | 2.500 | False | 0.129 | 0.937 | 0.227 | 6.492 | 0.690 | 0.592 | 2.783 |
+| white_marking | tophat | 2.500 | True | 0.440 | 0.897 | 0.590 | 1.484 | 0.484 | 0.592 | 2.886 |
+| white_marking | tophat | 3.000 | False | 0.214 | 0.897 | 0.346 | 3.325 | 0.563 | 0.594 | 2.510 |
+| white_marking | tophat | 3.000 | True | 0.567 | 0.841 | 0.677 | 0.802 | 0.444 | 0.597 | 2.510 |
+| white_marking | tophat | 3.500 | False | 0.296 | 0.849 | 0.439 | 2.056 | 0.476 | 0.597 | 2.222 |
+| white_marking | tophat | 3.500 | True | 0.674 | 0.722 | 0.697 | 0.437 | 0.333 | 0.602 | 2.227 |
+| white_marking | tophat | 4.000 | False | 0.382 | 0.786 | 0.514 | 1.278 | 0.413 | 0.597 | 2.128 |
+| white_marking | tophat | 4.000 | True | 0.766 | 0.651 | 0.704 | 0.254 | 0.262 | 0.603 | 2.106 |
 
 </details>
 
@@ -382,13 +391,9 @@ Best operating point per marking (64x512 normalisation, score = recall@full stre
 
 | task | method | norm | radius_frac_mae | within_005 | accuracy | n |
 |---|---|---|---|---|---|---|
-| collarette | gradient | 32x256 | 0.050 | 0.500 |  | 60.000 |
 | collarette | gradient | 64x512 | 0.036 | 0.883 |  | 60.000 |
-| collarette | texture | 32x256 | 0.133 | 0.217 |  | 60.000 |
 | collarette | texture | 64x512 | 0.066 | 0.433 |  | 60.000 |
-| fibre | gabor | 32x256 |  |  | 0.983 | 60.000 |
 | fibre | gabor | 64x512 |  |  | 1.000 | 60.000 |
-| fibre | structure_tensor | 32x256 |  |  | 0.983 | 60.000 |
 | fibre | structure_tensor | 64x512 |  |  | 1.000 | 60.000 |
 
 ## 6. End-to-end two-eye scan (SRS budgets: quality < 2 s, analysis < 30 s)
