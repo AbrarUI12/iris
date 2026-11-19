@@ -1,0 +1,6 @@
+# Occlusion-mask ablation on the best classical preprocessing (filled in after run 1)
+segmenters:
+  - name: daugman
+    params: {channel: red, inpaint: true, occl: [false, true], occl_k: [2.0, 3.0, 4.0]}
+  - name: raycast
+    params: {channel: red, inpaint: true, occl: [false, true], occl_k: [2.0, 3.0, 4.0]}

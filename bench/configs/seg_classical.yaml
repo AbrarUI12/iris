@@ -1,0 +1,8 @@
+# Classical segmenters x preprocessing grid (lists expand to a cartesian product)
+segmenters:
+  - name: daugman
+    params: {channel: [gray, red, v], clahe: [false, true], inpaint: [false, true]}
+  - name: hough
+    params: {channel: [gray, red, v], clahe: [false, true], inpaint: [false, true]}
+  - name: raycast
+    params: {channel: [gray, red, v], clahe: [false, true], inpaint: [false, true]}

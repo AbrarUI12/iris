@@ -63,8 +63,10 @@ def polar_to_image(tex: np.ndarray, shape, pupil: Ellipse, iris: Ellipse) -> tup
 
 def render_eye(h: int = 300, w: int = 400, color: str = "brown", seed: int = 0,
                lid_cover: float = 0.15, glare: bool = True, fibre: str = "radial",
-               texture: np.ndarray | None = None) -> tuple[np.ndarray, dict]:
+               texture: np.ndarray | None = None, collarette_frac: float | None = None,
+               ) -> tuple[np.ndarray, dict]:
     rng = np.random.default_rng(seed)
+    cf = collarette_frac if collarette_frac is not None else 0.35
     R = rng.uniform(0.25, 0.33) * min(h, w)
     cx = w / 2 + rng.uniform(-0.08, 0.08) * w
     cy = h / 2 + rng.uniform(-0.05, 0.05) * h
@@ -83,7 +85,7 @@ def render_eye(h: int = 300, w: int = 400, color: str = "brown", seed: int = 0,
     opening = (yy > top_y) & (yy < bot_y) & (np.abs(xx - cx) < half_w)
     sclera = np.array([215, 220, 235], np.float32)
     img[opening] = sclera
-    tex = texture if texture is not None else iris_texture(64, 512, IRIS_BGR[color], rng, fibre)
+    tex = texture if texture is not None else iris_texture(64, 512, IRIS_BGR[color], rng, fibre, cf)
     iris_img, ann = polar_to_image(tex, (h, w), pupil, iris)
     sel = ann.astype(bool) & opening
     img[sel] = iris_img[sel]
@@ -99,4 +101,5 @@ def render_eye(h: int = 300, w: int = 400, color: str = "brown", seed: int = 0,
     img = np.clip(img, 0, 255).astype(np.uint8)
     iris_mask = (sel & ~spec.astype(bool)).astype(np.uint8)
     return img, {"pupil": pupil, "iris": iris, "iris_mask": iris_mask,
-                 "pupil_mask": pm.astype(np.uint8), "color": color}
+                 "pupil_mask": pm.astype(np.uint8), "color": color,
+                 "collarette_frac": cf, "fibre": fibre}

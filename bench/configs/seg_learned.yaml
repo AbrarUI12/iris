@@ -1,0 +1,10 @@
+segmenters:
+  - name: mediapipe
+    params: {k: [3.0, 4.0, 5.0, 6.0]}
+  - name: onnx
+    params:
+      model: [seg_small_160.onnx, seg_small_224.onnx, seg_small_320.onnx, seg_large_224.onnx,
+              seg_small_160_int8.onnx, seg_small_224_int8.onnx, seg_small_320_int8.onnx, seg_large_224_int8.onnx]
+  - name: hybrid
+    params:
+      model: [seg_small_160.onnx, seg_small_224_int8.onnx, seg_small_224.onnx, seg_large_224.onnx]
