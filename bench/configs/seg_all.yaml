@@ -1,0 +1,85 @@
+segmenters:
+- name: daugman
+  params:
+    channel:
+    - gray
+    - red
+    - v
+    clahe:
+    - false
+    - true
+    inpaint:
+    - false
+    - true
+- name: hough
+  params:
+    channel:
+    - gray
+    - red
+    - v
+    clahe:
+    - false
+    - true
+    inpaint:
+    - false
+    - true
+- name: raycast
+  params:
+    channel:
+    - gray
+    - red
+    - v
+    clahe:
+    - false
+    - true
+    inpaint:
+    - false
+    - true
+- name: daugman
+  params:
+    channel: red
+    clahe: true
+    inpaint: true
+    rmax_frac: 0.6
+- name: raycast
+  params:
+    channel: red
+    clahe: true
+    inpaint: true
+    rmax_frac: 0.6
+- name: hough
+  params:
+    channel: red
+    clahe: true
+    inpaint: true
+    rmax_frac: 0.6
+- name: mediapipe
+  params:
+    lid_mask: false
+- name: mediapipe
+  params:
+    lid_mask: false
+- name: onnx
+  params:
+    model:
+    - seg_small_160.onnx
+    - seg_small_224.onnx
+    - seg_small_320.onnx
+    - seg_large_224.onnx
+    - seg_small_160_int8.onnx
+    - seg_small_224_int8.onnx
+    - seg_small_320_int8.onnx
+    - seg_large_224_int8.onnx
+- name: hybrid
+  params:
+    model:
+    - seg_small_160.onnx
+    - seg_small_224_int8.onnx
+    - seg_small_224.onnx
+    - seg_large_224.onnx
+- name: hybrid
+  params:
+    model:
+    - seg_small_224.onnx
+    - seg_small_224_int8.onnx
+    limbus: search
