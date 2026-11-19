@@ -12,7 +12,15 @@ Outputs are **descriptive image measurements** with explicit `unassessable` /
 `not_detected_in_assessable_image` / `present_candidate` states. Nothing here infers
 organ function or health; zone labels are practitioner configuration (`ZoneMap.labels`).
 
-**Which combination is best, and why:** see [`results/BENCHMARK.md`](results/BENCHMARK.md).
+**Which combination is best, and why:** see [`results/BENCHMARK.md`](results/BENCHMARK.md). In short:
+
+| Stage | Shipped default | Why (measured) |
+|---|---|---|
+| Segmentation | `auto`: Daugman (CLAHE, red channel, glint inpainting) for iris-filling close-ups, MobileNetV3-small/160 ONNX (3.8 MB) otherwise | Real close-ups: 28/30 pass (learned alone 0/30); whole-eye framing: Dice 0.91 NIR / 0.78 RGB (Daugman 0.57 / 0.61) |
+| Quality gate | Explainable rules (+ logistic score option) | Logistic AUC 0.91 vs rules 0.78; precheck ~5 ms |
+| Colour | 5-feature CIELAB logistic model, `uncertain` band | macro-F1 0.88 (hand rules 0.52); re-fit per camera |
+| Markings | ridge furrows, ΔL white, DoG lacuna, ΔE pigment, gradient collarette, structure-tensor fibres | Synthetic-injection recall 0.67–1.0 at full strength; **not practitioner-validated** |
+| Speed | Two-eye scan ~0.5 s on 1 CPU core | SRS budget 30 s |
 
 ## Quick start
 
@@ -40,12 +48,13 @@ pytest -q
 ## Reproduce the benchmark
 
 ```bash
-python scripts/fetch_datasets.py && python scripts/build_manifest.py
+python scripts/fetch_datasets.py pupil-eye-iris-seg upol synthetic-eyes && python scripts/build_manifest.py
 for cfg in small:160 small:224 small:320 large:224; do b=${cfg%:*}; s=${cfg#*:}
-  python -m train.train_seg --backbone $b --size $s --out models/seg_${b}_${s}
+  python -m train.train_seg --backbone $b --size $s --datasets synth_eyes nir_eye --out models/seg_${b}_${s}
   python -m train.quantize_int8 models/seg_${b}_${s}.onnx; done
-python -m bench.seg --config bench/configs/seg_classical.yaml
-python -m bench.seg --config bench/configs/seg_learned.yaml --out results/seg_learned
-python -m bench.quality && python -m bench.color && python -m bench.markings && python -m bench.e2e
+python -m bench.seg --config bench/configs/seg_all.yaml --datasets synth_eyes nir_eye
+python -m bench.visual_sheet --split test --n 30 --configs "auto|model=seg_small_160.onnx"   # real close-ups, graded by eye
+python -m bench.quality --segmenter auto --segkw '{"model":"seg_small_160.onnx"}'
+python -m bench.color && python -m bench.markings && python -m bench.e2e
 python -m bench.report
 ```

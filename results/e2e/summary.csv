@@ -1,0 +1,7 @@
+pipeline,threads,scan_ms_p50,scan_ms_p95,precheck_ms_p95,peak_rss_mb,rate_accepted,candidates_per_eye,rate_review,rate_retake
+auto_default,1,507.50006,553.04386,4.473,672.625,1.0,3.8625,,
+auto_default,4,482.94821,553.83276,4.7715,672.22656,1.0,3.8625,,
+classical_daugman,1,489.24996,556.00675,4.713,632.01562,1.0,3.9125,,
+classical_daugman,4,493.26521,551.41995,4.716,635.40625,1.0,3.9125,,
+learned_small160,1,351.84778,368.29722,3.5415,664.96094,0.775,4.8,0.2125,0.0125
+learned_small160,4,344.53032,389.76113,4.5405,662.15234,0.775,4.8,0.2125,0.0125

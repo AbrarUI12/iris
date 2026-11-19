@@ -114,12 +114,12 @@ def main():
     for r in seg:
         r["size_mb"] = model_size_mb(r["tag"])
     choice, top = select(seg)
-    md += ["## 1. Recommendation", ""]
+    md += ["## 1. Recommendation", "", "**Shipped default: `auto` segmenter** (see the explanation below the programmatic result).", ""]
     if choice:
-        md += [f"* **Default segmenter (balanced):** `{choice['tag']}` – iris Dice {fmt(choice['dice_iris_mean'])}, "
+        md += [f"* **Pixel-metric winner (programmatic, masked test sets only):** `{choice['tag']}` – iris Dice {fmt(choice['dice_iris_mean'])}, "
                f"failure rate {fmt(choice['fail_rate_dice<0.8'])}, p95 {fmt(choice['ms_p95'], 0)} ms/image, "
                f"model {fmt(choice['size_mb'], 1)} MB.",
-               f"* **Max accuracy:** `{top['tag']}` – iris Dice {fmt(top['dice_iris_mean'])}, p95 {fmt(top['ms_p95'], 0)} ms.",
+               f"* **Highest mean iris Dice:** `{top['tag']}` – iris Dice {fmt(top['dice_iris_mean'])}, p95 {fmt(top['ms_p95'], 0)} ms.",
                "* Selection rule: cheapest config (p95 latency + 20 ms per MB of model) whose mean iris Dice is within "
                "0.01 of the best and whose failure rate (Dice < 0.8) is within 2 points of the best.", ""]
     extra = R / "notes.md"
@@ -139,9 +139,10 @@ def main():
                      ["config", "Dice mean", "Dice median", "fail", "HD95 px", "pupil Dice", "pupil ctr err", "ms p50", "ms p95", "ok"]),
                "", "</details>", ""]
     if seg_x:
-        md += ["### Cross-dataset generalisation", "",
-               table(sorted(seg_x, key=lambda r: -r["dice_iris_mean"]),
-                     ["tag", "dataset", "dice_iris_mean", "fail_rate_dice<0.8", "dice_pupil_mean", "ms_p50"]), ""]
+        sx = sorted(seg_x, key=lambda r: -r["dice_iris_mean"])
+        cols = ["tag", "dataset", "dice_iris_mean", "fail_rate_dice<0.8", "dice_pupil_mean", "ms_p50"]
+        md += ["### Real NIR eyes (human-annotated masks, held-out subjects)", "", table(sx[:10], cols), "",
+               "<details><summary>All configs on NIR</summary>", "", table(sx, cols), "", "</details>", ""]
     vg = read("visual/grades_round1.csv") + read("visual_val/grades.csv") + read("visual_test/grades.csv")
     if vg:
         md += ["### Real visible-light close-ups (UPOL, no masks): visual pass/fail of the overlay", "",
