@@ -57,9 +57,12 @@ def _run(args):
     lab = load_label(row, Path(root))
     if lab.shape != img.shape[:2]:
         lab = cv2.resize(lab, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
-    seg(img)  # warm-up for the first call of each model is amortised below
+    from aeye_iris.types import SegResult
     t0 = time.perf_counter()
-    r = seg(img)
+    try:
+        r = seg(img)
+    except Exception as e:  # a crash counts as a failed segmentation
+        r = SegResult(None, None, method=key, extra={"error": repr(e)})
     ms = (time.perf_counter() - t0) * 1000
     gi, gp = lab == 1, lab == 2
     has_p = bool(row.get("pupil_mask"))

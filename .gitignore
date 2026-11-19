@@ -9,3 +9,6 @@ runs/
 models/pretrained/
 *.pt
 .venv/
+runs_*.log
+data/fetch2.log
+models/*/best.pt

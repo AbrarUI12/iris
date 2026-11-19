@@ -97,7 +97,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", default="data/manifest.csv")
     ap.add_argument("--root", default=".")
-    ap.add_argument("--datasets", nargs="*", default=["ubiris_v2"])
+    ap.add_argument("--datasets", nargs="*", default=["upol", "synth_eyes"])
     ap.add_argument("--segmenter", default="daugman")
     ap.add_argument("--segkw", default="{}")
     ap.add_argument("--limit", type=int, default=200)

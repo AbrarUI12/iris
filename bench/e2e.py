@@ -53,7 +53,7 @@ def main():
     ap.add_argument("--pipelines", default="bench/configs/e2e.yaml")
     ap.add_argument("--manifest", default="data/manifest.csv")
     ap.add_argument("--root", default=".")
-    ap.add_argument("--datasets", nargs="*", default=["ubiris_v2"])
+    ap.add_argument("--datasets", nargs="*", default=["upol"])
     ap.add_argument("--pairs", type=int, default=40)
     ap.add_argument("--out", default="results/e2e")
     ap.add_argument("--_child", default=None)

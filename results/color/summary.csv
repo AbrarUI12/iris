@@ -1,0 +1,15 @@
+feature,model,margin,macro_f1,accuracy,uncertain_rate,f1_on_decided
+lab_median,logistic,0.0,0.87668,0.88251,0.0,0.87668
+lab_median,logistic,0.15,0.86427,0.8388,0.06831,0.89447
+hue_hist,logistic,0.0,0.86009,0.86339,0.0,0.86009
+hue_hist,logistic,0.15,0.85755,0.83607,0.06284,0.88846
+lab_pct,logistic,0.0,0.8549,0.85792,0.0,0.8549
+lab_median,knn,0.0,0.84891,0.85519,0.0,0.84891
+lab_median,knn,0.15,0.84891,0.85519,0.0,0.84891
+lab_pct,logistic,0.15,0.84368,0.82787,0.04372,0.86104
+lab_pct,knn,0.0,0.80453,0.80601,0.0,0.80453
+lab_pct,knn,0.15,0.80453,0.80601,0.0,0.80453
+hue_hist,knn,0.0,0.78205,0.79508,0.0,0.78205
+hue_hist,knn,0.15,0.78205,0.79508,0.0,0.78205
+lab_rules,thresholds,0.0,0.51794,0.69672,0.0,0.51794
+lab_rules,thresholds,0.15,0.51611,0.6694,0.06557,0.5296

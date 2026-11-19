@@ -1,0 +1,16 @@
+{
+ "eyes": 128,
+ "majority_agreement": {
+  "learned": 0.9713541666666666,
+  "thresholds": 0.9817708333333333
+ },
+ "best": {
+  "feature": "lab_median",
+  "model": "logistic",
+  "margin": 0.0,
+  "macro_f1": 0.876679376512658,
+  "accuracy": 0.8825136612021858,
+  "uncertain_rate": 0.0,
+  "f1_on_decided": 0.876679376512658
+ }
+}

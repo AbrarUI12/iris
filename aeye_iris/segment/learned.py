@@ -177,24 +177,38 @@ class MediaPipeIris:
         return to_img(iris), to_img(eye)
 
     def __call__(self, bgr: np.ndarray) -> SegResult:
-        from .classical import PUPIL_ANGLES, _grid, _ido_search
+        from .classical import LIMBUS_ANGLES, PUPIL_ANGLES, _grid, _ido_search
         tag = f"mediapipe[k={self.k}]"
         h, w = bgr.shape[:2]
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        cx, cy, side = w / 2, h / 2, float(max(h, w))
-        iris = eye = None
-        for i in range(self.iters):
-            iris, eye = self._run(rgb, cx, cy, side)
-            c = iris[0]
-            r = float(np.mean(np.hypot(*(iris[1:] - c).T)))
-            cx, cy = float(c[0]), float(c[1])
-            if i < self.iters - 1:
-                side = max(16.0, self.k * r)
-        limbus = Ellipse.circle(cx, cy, r)
-        # pupil: classical search inside the limbus
         g, clean, spec = prepare(bgr, "red", False, True)
         gs, s = resize_max(g, 240)
         gs = cv2.GaussianBlur(gs, (0, 0), 1.0).astype(np.float32)
+        # Measured on our data: the landmark model's iris radius is ~9% of the crop side
+        # regardless of the true iris size, i.e. it only localises the CENTRE reliably.
+        # So: centre proposals at several crop scales; radius from the classical
+        # integro-differential search (+ pupil/limbus disambiguation); keep the best edge.
+        from .classical import _resolve_pair
+        rmin, rmax = 0.10 * min(gs.shape), 0.48 * min(gs.shape)
+        best, best_sc, eye = None, -1e9, None
+        for frac in (0.5, 0.75, 1.0, 1.4):
+            ir, ey = self._run(rgb, w / 2, h / 2, frac * max(h, w))
+            cx, cy = float(ir[0][0]), float(ir[0][1])
+            if not (0 <= cx < w and 0 <= cy < h):
+                continue
+            cand = _grid(cx * s - 4, cx * s + 4, cy * s - 4, cy * s + 4, 2.0)
+            radii = np.arange(rmin, rmax, 1.0, dtype=np.float32)
+            (ox, oy), oR, sc = _ido_search(gs, cand, radii, LIMBUS_ANGLES, 1.5)
+            if sc > best_sc:
+                best, best_sc, eye = (float(ox), float(oy), float(oR)), sc, ey
+        if best is not None:
+            (lx, ly, lR), _, _ = _resolve_pair(gs, *best, rmax, 0.12, 0.75)
+            best = (lx / s, ly / s, lR / s)
+        if best is None:
+            return SegResult(None, None, method=tag)
+        cx, cy, r = best
+        limbus = Ellipse.circle(cx, cy, r)
+        # pupil: classical search inside the limbus
         R = r * s
         c = _grid(cx * s - 0.2 * R, cx * s + 0.2 * R, cy * s - 0.2 * R, cy * s + 0.2 * R, max(1.0, R / 20))
         radii = np.arange(max(2.0, 0.12 * R), 0.75 * R, 1.0, dtype=np.float32)

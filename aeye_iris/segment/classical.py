@@ -87,6 +87,8 @@ def _ido_search(g, centers, radii, angles, sigma=1.5, sign=+1):
         dg, k = _span_diff(prof, radii, sigma)
         dg = dg * sign
         d = dg if d is None else np.minimum(d, dg)
+    if d is None or d.size == 0:
+        return centers[0], float(radii[len(radii) // 2]) if len(radii) else 1.0, -1e9
     ci, ri = np.unravel_index(np.argmax(d), d.shape)
     r = radii[ri + k] if k else (radii[ri] + radii[ri + 1]) / 2
     return centers[ci], float(r), float(d[ci, ri])

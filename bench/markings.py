@@ -52,8 +52,12 @@ def _one(args):
     row, root, seed = args
     cv2.setNumThreads(1)
     img = cv2.imread(str(Path(root) / row["image"]))
-    lab = load_label(row, Path(root))
-    seg = gt_seg(lab)
+    if row.get("iris_mask"):
+        seg = gt_seg(load_label(row, Path(root)))
+    else:  # UPOL: no masks -> geometry from the classical segmenter (visually spot-checked)
+        from aeye_iris.segment import build
+        seg = build("daugman", channel="red", clahe=True, inpaint=True)(img)
+        seg = seg if seg.ok else None
     out = []
     if seg is None:
         return out
@@ -146,7 +150,7 @@ def synthetic_struct(n: int = 60):
         if t == "collarette":
             e = np.array([r["err"] for r in rs])
             summ.append(dict(task=t, method=m, norm=nm, radius_frac_mae=float(np.nanmean(e)),
-                             within_0.05=float(np.nanmean(e < 0.05)), n=len(rs)))
+                             within_005=float(np.nanmean(e < 0.05)), n=len(rs)))
         else:
             summ.append(dict(task=t, method=m, norm=nm, accuracy=float(np.mean([r["correct"] for r in rs])), n=len(rs)))
     return summ
@@ -157,14 +161,14 @@ def main():
     ap.add_argument("--manifest", default="data/manifest.csv")
     ap.add_argument("--root", default=".")
     ap.add_argument("--split", default="test")
-    ap.add_argument("--datasets", nargs="*", default=["ubiris_v2"])
+    ap.add_argument("--datasets", nargs="*", default=["upol"])
     ap.add_argument("--limit", type=int, default=150)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--out", default="results/markings")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    rows = [r for r in read_manifest(a.manifest, a.split, a.datasets) if r.get("pupil_mask")]
+    rows = read_manifest(a.manifest, a.split, a.datasets)
     rng = np.random.default_rng(0)
     rows = [rows[i] for i in sorted(rng.choice(len(rows), min(a.limit, len(rows)), replace=False))]
     t0 = time.time()

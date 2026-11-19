@@ -31,13 +31,26 @@ LABELS = Path("data/labels/color_labels.csv")
 
 
 def eye_key(row):
-    return row["id"].split("_S")[0]  # e.g. ubiris_v2/C12 -> one eye
+    return row["id"].rsplit("_", 1)[0]  # upol/001L_2 -> upol/001L (one eye)
 
 
-def load_lab(row, root):
+_SEG = None
+
+
+def load_lab(row, root, segmenter="daugman"):
+    """Iris pixels in CIELAB. Uses GT masks when the dataset has them, otherwise the
+    given segmenter (UPOL has no masks)."""
+    global _SEG
     img = cv2.imread(str(Path(root) / row["image"]))
-    lab = load_label(row, Path(root))
-    seg = gt_seg(lab)
+    if row.get("iris_mask"):
+        seg = gt_seg(load_label(row, Path(root)))
+    else:
+        if _SEG is None:
+            from aeye_iris.segment import build
+            _SEG = build(segmenter, channel="red", clahe=True, inpaint=True)
+        seg = _SEG(img)
+        if not seg.ok:
+            seg = None
     if seg is None:
         return None
     return iris_pixels_lab(img, seg.iris_mask, seg.pupil, seg.iris)
@@ -100,7 +113,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", default="data/manifest.csv")
     ap.add_argument("--root", default=".")
-    ap.add_argument("--datasets", nargs="*", default=["ubiris_v2"])
+    ap.add_argument("--datasets", nargs="*", default=["upol"])
     ap.add_argument("--sheet", action="store_true")
     ap.add_argument("--out", default="results/color")
     a = ap.parse_args()
@@ -121,7 +134,7 @@ def main():
     print(f"{len(items)} labelled iris images", {c: sum(l == c for _, l, _ in items) for c in (*CLASSES, 'uncertain')})
     sure = [(r, l, lab) for r, l, lab in items if l != "uncertain"]
     y = [l for _, l, _ in sure]
-    groups = np.array([int(r["subject"]) for r, _, _ in sure])
+    groups = np.array([int(r["subject"]) if r["subject"].isdigit() else hash(r["subject"]) for r, _, _ in sure])
     folds = groups % 5
     res = []
     # thresholds (no training)
@@ -161,7 +174,7 @@ def main():
     Path("models/color_model.json").write_text(json.dumps(params))
     # stability on unlabelled same-eye images (test split)
     model = LearnedColor(params)
-    test = [r for r in read_manifest(a.manifest, "test", a.datasets) if r.get("pupil_mask")]
+    test = read_manifest(a.manifest, None, a.datasets)
     by_eye = {}
     for r in test:
         lab = load_lab(r, a.root)

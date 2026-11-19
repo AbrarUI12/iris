@@ -18,7 +18,9 @@ from pathlib import Path
 
 DATASETS = {
     "ubirisv2": "chinmoyslg/ubirisv2",  # UBIRIS.v2 images + IRISSEG-EP (OperatorA) masks
-    "pupil-eye-iris-seg": "itguides/pupil-eye-and-iris-segmentation",  # MIT, eye/iris/pupil masks
+    "pupil-eye-iris-seg": "itguides/pupil-eye-and-iris-segmentation",  # MIT, NIR eye/iris/pupil masks
+    "upol": "ouaraskhelilrafik/iris-images",  # UPOL iris DB: RGB close-ups, no masks
+    "synthetic-eyes": "allexmendes/synthetic-human-eyes",  # CC BY 4.0, RGB renders + masks
 }
 API = "https://www.kaggle.com/api/v1/datasets/download/{ref}"
 
@@ -71,6 +73,10 @@ def main() -> None:
         for inner in list(dest.rglob("*.zip")):
             if inner.name != "archive.zip":
                 with zipfile.ZipFile(inner) as zf:
+                    if any(i.flag_bits & 1 for i in zf.infolist()):
+                        # e.g. UBIRIS.v2 images: password from the authors' licence; never bypassed
+                        print(f"[{name}] {inner.name} is password-protected; skipped", flush=True)
+                        continue
                     zf.extractall(inner.parent / inner.stem)
                 inner.unlink()
         z.unlink()

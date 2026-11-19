@@ -1,0 +1,3 @@
+segmenters:
+  - name: mediapipe
+    params: {lid_mask: [false, true]}
