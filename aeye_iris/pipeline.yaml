@@ -5,10 +5,10 @@ segmentation:
 quality: {model_path: models/quality_model.json}   # learned gate (bench/quality.py); re-fit on A-EYE photos
 normalization: {n_r: 64, n_t: 512, mirror_left: false}
 color: {model_path: models/color_model.json, uncertain_margin: 0.15}
-markings:
-  dark_pigmentation: {method: deltaE, k: 3.5}
-  white_marking: {method: deltaL, k: 2.5}
-  lacuna: {method: dog, k: 2.0}
-  contraction_furrow: {method: ridge, k: 4.0}
+markings:                          # operating points chosen by F1 on UPOL *val* hosts (bench/markings.py)
+  dark_pigmentation: {method: deltaE, k: 4.0}
+  white_marking: {method: deltaL, k: 3.0}
+  lacuna: {method: dog, k: 2.5, strict: true}
+  contraction_furrow: {method: ridge, k: 4.0, strict: true}
   collarette: {method: gradient}
   fibre_type: {method: structure_tensor, threshold: 0.2}

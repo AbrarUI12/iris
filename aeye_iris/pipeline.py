@@ -106,11 +106,11 @@ class Pipeline:
             mcfg = self.mk.get(kind, {})
             method = mcfg.get("method", _methods[0])
             k = mcfg.get("k", 3.0)
-            ver = f"{kind}_{method}_k{k}"
+            ver = f"{kind}_{method}_k{k}{'_strict' if mcfg.get('strict') else ''}"
             if not q.fine_markings_assessable:
                 obs.markings.append(MarkingOut(marking_type=kind, status=Status.unassessable, method_version=ver))
                 continue
-            cands = fn(norm, method, k=k)
+            cands = fn(norm, method, k=k, strict=mcfg.get("strict", False))
             all_cands += cands
             if not cands:
                 obs.markings.append(MarkingOut(marking_type=kind, status=Status.not_detected, method_version=ver))

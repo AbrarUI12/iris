@@ -1,0 +1,5 @@
+split,kind,method,k,strict,fp_per_clean_image,ms_mean,precision@s0.5,recall@s0.5,f1@s0.5,loc_iou@s0.5,precision@s1.0,recall@s1.0,f1@s1.0,loc_iou@s1.0,val_f1@s1.0
+test,contraction_furrow,ridge,4.0,True,0.73016,3.22071,0.45732,0.59524,0.51724,0.67405,0.5814,0.99206,0.73314,0.78071,0.7947
+test,dark_pigmentation,deltaE,4.0,False,0.27778,46.05718,0.125,0.03968,0.06024,0.41911,0.68468,0.60317,0.64135,0.55311,0.65979
+test,lacuna,dog,2.5,True,0.11111,18.9861,0.26316,0.03968,0.06897,0.50866,0.86364,0.60317,0.71028,0.70788,0.81081
+test,white_marking,deltaL,3.0,False,0.2619,31.70909,0.6413,0.46825,0.54128,0.56047,0.7551,0.88095,0.81319,0.60631,0.86179
