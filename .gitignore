@@ -12,3 +12,4 @@ models/pretrained/
 runs_*.log
 data/fetch2.log
 models/*/best.pt
+runs/

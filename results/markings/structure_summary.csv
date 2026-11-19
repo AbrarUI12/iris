@@ -1,0 +1,9 @@
+task,method,norm,radius_frac_mae,within_005,n,accuracy
+collarette,gradient,32x256,0.04961,0.5,60,
+collarette,gradient,64x512,0.036,0.88333,60,
+collarette,texture,32x256,0.13307,0.21667,60,
+collarette,texture,64x512,0.06604,0.43333,60,
+fibre,gabor,32x256,,,60,0.98333
+fibre,gabor,64x512,,,60,1.0
+fibre,structure_tensor,32x256,,,60,0.98333
+fibre,structure_tensor,64x512,,,60,1.0
