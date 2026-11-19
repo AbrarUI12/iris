@@ -62,15 +62,10 @@ def auc(y, s):
     return max(a, 1 - a)  # direction-agnostic
 
 
-def calibrate(rows, target_frr: float = 0.10) -> QualityThresholds:
-    """Choose each threshold at the quantile of ORIGINAL images that keeps their joint
-    false-retake rate near the target (split evenly across the active checks)."""
-    orig = [r for r in rows if r["kind"] == "original" and r["seg_ok"] == 1]
-    q = target_frr / 5
+def _thresholds_at(orig, q: float) -> QualityThresholds:
     col = lambda k: np.array([r[k] for r in orig], float)  # noqa: E731
-    t = QualityThresholds()
     return replace(
-        t,
+        QualityThresholds(),
         min_focus_global=float(np.nanquantile(col("focus_lap_global"), q)),
         min_focus_lap=float(np.nanquantile(col("focus_lap_iris"), q)),
         max_glare_iris=float(np.nanquantile(col("glare_iris"), 1 - q)),
@@ -81,6 +76,18 @@ def calibrate(rows, target_frr: float = 0.10) -> QualityThresholds:
         max_clip_high=float(np.nanquantile(col("clip_high"), 1 - q / 2)),
         max_clip_low=float(np.nanquantile(col("clip_low"), 1 - q / 2)),
     )
+
+
+def calibrate(rows, target_frr: float = 0.10) -> QualityThresholds:
+    """One shared per-check quantile q, binary-searched so the JOINT false-retake rate
+    on ORIGINAL validation images (segmentation succeeded) is ~target_frr."""
+    orig = [r for r in rows if r["kind"] == "original" and r["seg_ok"] == 1]
+    lo, hi = 0.0, target_frr
+    for _ in range(25):
+        q = (lo + hi) / 2
+        frr = np.mean([rule_gate(r, _thresholds_at(orig, q)) for r in orig])
+        lo, hi = (q, hi) if frr < target_frr else (lo, q)
+    return _thresholds_at(orig, lo)
 
 
 def rule_gate(r: dict, t: QualityThresholds) -> int:
