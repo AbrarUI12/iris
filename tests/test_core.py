@@ -103,3 +103,12 @@ def test_pipeline_schema_and_determinism(tmp_path):
         kinds = {m["marking_type"] for m in e["markings"]}
         assert kinds == {"dark_pigmentation", "white_marking", "lacuna", "contraction_furrow",
                          "collarette", "fibre_type"}
+
+
+def test_auto_segmenter_selects_by_framing():
+    from aeye_iris.segment import build
+    seg = build("auto", model="seg_small_160.onnx")
+    img, gt = render_eye(seed=4)
+    r = seg(img)
+    assert r.ok and r.method.startswith("auto->")
+    assert "closeup_frac" in r.extra

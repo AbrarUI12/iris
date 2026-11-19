@@ -142,6 +142,15 @@ def main():
         md += ["### Cross-dataset generalisation", "",
                table(sorted(seg_x, key=lambda r: -r["dice_iris_mean"]),
                      ["tag", "dataset", "dice_iris_mean", "fail_rate_dice<0.8", "dice_pupil_mean", "ms_p50"]), ""]
+    vg = read("visual/grades_round1.csv") + read("visual_val/grades.csv") + read("visual_test/grades.csv")
+    if vg:
+        md += ["### Real visible-light close-ups (UPOL, no masks): visual pass/fail of the overlay", "",
+               "Graded by eye on fixed random samples. `visual_val` = tuning images, `visual_test` = held-out "
+               "subjects never looked at during tuning (final numbers). Sheets are in `results/visual*/`.", "",
+               "Validation (24 images, used for tuning):", "",
+               table(read("visual_val/grades.csv"), ["config", "pass_count", "n", "fail_tiles"]), "",
+               "**Held-out test (30 images):**", "",
+               table(read("visual_test/grades.csv"), ["config", "pass_count", "n", "fail_tiles", "note"]), ""]
     q = read("quality/summary.csv")
     if q:
         md += ["## 3. Capture-quality gate (synthetic degradations of held-out real images)", "",
