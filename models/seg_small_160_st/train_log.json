@@ -1,0 +1,97 @@
+{
+ "args": {
+  "manifest": "data/manifest.csv",
+  "root": ".",
+  "datasets": [
+   "synth_eyes",
+   "nir_eye",
+   "upol_pseudo"
+  ],
+  "backbone": "small",
+  "size": 160,
+  "epochs": 10,
+  "bs": 16,
+  "lr": 0.001,
+  "dec": 32,
+  "threads": 4,
+  "max_train": 0,
+  "repeat": [
+   "upol_pseudo:4"
+  ],
+  "init": "models/seg_small_160/best.pt",
+  "out": "models/seg_small_160_st"
+ },
+ "history": [
+  {
+   "epoch": 0,
+   "loss": 0.6848503619432449,
+   "val_dice_iris": 0.8397419485327315,
+   "val_dice_pupil": 0.824437943463252,
+   "sec": 611.5625984668732
+  },
+  {
+   "epoch": 1,
+   "loss": 0.568057233946664,
+   "val_dice_iris": 0.8592189565096816,
+   "val_dice_pupil": 0.8276674604298522,
+   "sec": 60.11682963371277
+  },
+  {
+   "epoch": 2,
+   "loss": 0.5457637593150139,
+   "val_dice_iris": 0.8548884312175724,
+   "val_dice_pupil": 0.8280511985424498,
+   "sec": 59.308777809143066
+  },
+  {
+   "epoch": 3,
+   "loss": 0.5213490439312799,
+   "val_dice_iris": 0.8684175930202824,
+   "val_dice_pupil": 0.8341088008901028,
+   "sec": 60.20802044868469
+  },
+  {
+   "epoch": 4,
+   "loss": 0.5243648158652442,
+   "val_dice_iris": 0.8664208370120559,
+   "val_dice_pupil": 0.8362866648562151,
+   "sec": 60.39072823524475
+  },
+  {
+   "epoch": 5,
+   "loss": 0.5194671386054583,
+   "val_dice_iris": 0.8624783522870443,
+   "val_dice_pupil": 0.8383020109815956,
+   "sec": 59.71003532409668
+  },
+  {
+   "epoch": 6,
+   "loss": 0.499298081440585,
+   "val_dice_iris": 0.8585983057952907,
+   "val_dice_pupil": 0.8370726273675794,
+   "sec": 60.512046575546265
+  },
+  {
+   "epoch": 7,
+   "loss": 0.486633774638176,
+   "val_dice_iris": 0.8624301719338927,
+   "val_dice_pupil": 0.8390371068610414,
+   "sec": 59.41553854942322
+  },
+  {
+   "epoch": 8,
+   "loss": 0.48806317448616027,
+   "val_dice_iris": 0.8654132335561595,
+   "val_dice_pupil": 0.8402057985583805,
+   "sec": 61.698514461517334
+  },
+  {
+   "epoch": 9,
+   "loss": 0.4893860929778644,
+   "val_dice_iris": 0.8649695142082972,
+   "val_dice_pupil": 0.8405604336449034,
+   "sec": 59.148581743240356
+  }
+ ],
+ "params": 956420
+}
