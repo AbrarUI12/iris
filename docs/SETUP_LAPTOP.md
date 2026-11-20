@@ -121,8 +121,7 @@ python scripts/pseudo_label_upol.py
 python scripts/build_manifest.py
 ```
 
-The Synthetic Human Eyes download is ~13 GB. If it gets cut off, re-run the fetch; files that are already
-complete are skipped.
+The Synthetic Human Eyes download is ~13 GB. Fetch one dataset at a time (`python scripts/fetch_datasets.py synthetic-eyes`) so an interrupted download only repeats that one.
 
 3. Train the default model on the GPU:
 
