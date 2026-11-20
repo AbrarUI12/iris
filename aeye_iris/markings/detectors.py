@@ -175,7 +175,9 @@ def furrows(norm: NormalizedIris, method: str = "ridge", k: float = 3.0,
     cands = components(m, v, min_cols, int(0.2 * m.size), "contraction_furrow", score, shape_attrs)
     out = []
     for c in cands:
-        if c.attrs["angular_extent"] >= min_cols and c.attrs["radial_extent"] <= max(6, 0.15 * n_r):
+        # a 300+ degree "arc" is the iris/pupil boundary or a ring artefact, not a furrow
+        if (c.attrs["angular_extent"] >= min_cols and c.attrs["radial_extent"] <= max(6, 0.15 * n_r)
+                and c.attrs["angular_extent"] < 300 / 360 * n_t):
             c.attrs["arc_deg"] = round(c.attrs["angular_extent"] / n_t * 360, 1)
             out.append(c)
     return out
@@ -301,6 +303,9 @@ def strict_filter(cands: list[Candidate], k: float, score_gain: float = 1.25,
 def _with_strict(fn):
     def wrapped(norm, method, k=3.0, strict=False, **P):
         c = fn(norm, method, k=k, **P)
+        n_t = norm.valid.shape[1]
+        # spots/gaps spanning most of the circle are boundary artefacts (e.g. a mis-placed limbus)
+        c = [x for x in c if x.kind == "contraction_furrow" or x.attrs.get("angular_extent", 0) < 0.25 * n_t]
         return strict_filter(c, k) if strict else c
     wrapped.__name__ = fn.__name__
     wrapped.__doc__ = fn.__doc__

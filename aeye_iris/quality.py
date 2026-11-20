@@ -189,6 +189,15 @@ def assess(bgr: np.ndarray, seg: SegResult, t: QualityThresholds = QualityThresh
     rule reasons are still reported, and a reason is derived from the top contributing
     feature when only the model fires."""
     q = _assess_rules(bgr, seg, t)
+    if seg.ok:
+        from .plausibility import measures, reasons
+        pm = measures(bgr, seg)
+        q.metrics.update({f"plaus_{k}": round(float(v), 4) for k, v in pm.items() if np.isfinite(v)})
+        pr = reasons(pm)
+        if pr:  # the segmentation does not look like an eye: never analyse it
+            q.status, q.reasons = "retake", pr
+            q.color_assessable = q.fine_markings_assessable = False
+            return q
     if model is None or not seg.ok:
         return q
     p, worst = model.score(q.metrics)
@@ -216,7 +225,9 @@ def _assess_rules(bgr: np.ndarray, seg: SegResult, t: QualityThresholds = Qualit
                           color_assessable=False, fine_markings_assessable=False)
     if im["iris_radius_px"] < t.min_iris_radius_px:
         reasons.append("iris too small: move the camera closer")
-    if im["visible_frac"] < t.min_visible_frac:
+    if im.get("iris_in_frame", 1) < 1:
+        reasons.append("iris not found reliably: centre the eye in the frame, iris clearly visible")
+    elif im["visible_frac"] < t.min_visible_frac:
         reasons.append("iris partly covered: open the eye wider (eyelids/lashes cover the iris)")
     if im["glare_iris"] > t.max_glare_iris:
         reasons.append("reflections cover the iris: change the light angle")

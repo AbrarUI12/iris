@@ -112,3 +112,53 @@ def test_auto_segmenter_selects_by_framing():
     r = seg(img)
     assert r.ok and r.method.startswith("auto->")
     assert "closeup_frac" in r.extra
+
+
+# ---- real-photo failure modes (dark iris read as pupil; ring artefacts) -------------
+def _dark_eye(seed=11):
+    import synth.eye as E
+    E.IRIS_BGR["very_dark"] = (22, 28, 38)  # dark brown iris, pupil barely separable
+    return render_eye(seed=seed, color="very_dark", glare=False)
+
+
+def test_plausibility_accepts_correct_segmentation():
+    from aeye_iris.plausibility import measures, reasons
+    for seed, color in ((1, "brown"), (3, "blue"), (5, "green_mixed")):
+        img, gt = render_eye(seed=seed, color=color, glare=False)
+        seg = SegResult(gt["pupil"], gt["iris"], gt["iris_mask"], gt["pupil_mask"])
+        assert reasons(measures(img, seg)) == [], (seed, color)
+
+
+def test_plausibility_rejects_iris_taken_for_pupil():
+    """User photo failure: the whole dark iris was returned as the 'pupil' and a circle
+    ~3x larger (sclera, lids, skin) as the 'iris'."""
+    from aeye_iris.geometry import Ellipse
+    from aeye_iris.plausibility import measures, reasons
+    img, gt = _dark_eye()
+    true_iris = gt["iris"]
+    wrong_iris = Ellipse.circle(true_iris.cx, true_iris.cy, true_iris.r * 2.8)
+    seg = SegResult(Ellipse.circle(true_iris.cx, true_iris.cy, true_iris.r), wrong_iris,
+                    wrong_iris.to_mask(img.shape[:2]), None)
+    assert reasons(measures(img, seg)), "implausible iris outline must trigger a retake"
+
+
+def test_assess_retakes_out_of_frame_iris():
+    from aeye_iris.geometry import Ellipse
+    from aeye_iris.quality import assess
+    img, gt = render_eye(seed=2)
+    off = Ellipse.circle(-400, 150, 900)
+    q = assess(img, SegResult(gt["pupil"], off, off.to_mask(img.shape[:2]), gt["pupil_mask"]))
+    assert q.status == "retake" and not q.color_assessable
+    assert any("iris not found" in r for r in q.reasons)
+
+
+def test_no_full_ring_marking_candidates():
+    from aeye_iris.markings.detectors import DETECTORS
+    img, gt = render_eye(seed=6, glare=False, lid_cover=0.0)
+    n = normalize(img, SegResult(gt["pupil"], gt["iris"], gt["iris_mask"], gt["pupil_mask"]))
+    n.image = n.image.copy()
+    n.image[40:42, :] = (n.image[40:42, :] * 0.4).astype(n.image.dtype)  # full 360-degree dark ring
+    n.image[10:12, :] = np.clip(n.image[10:12, :].astype(int) + 90, 0, 255).astype(n.image.dtype)  # bright ring
+    for kind, (fn, methods) in DETECTORS.items():
+        for c in fn(n, methods[0], k=2.5):
+            assert c.attrs.get("angular_extent", 0) < 0.85 * n.valid.shape[1], (kind, c.attrs)

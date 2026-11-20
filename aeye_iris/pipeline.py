@@ -102,6 +102,7 @@ class Pipeline:
         t0 = time.perf_counter()
         norm = normalize(bgr, seg, self.n_r, self.n_t, eye_side, self.mirror_left)
         all_cands = []
+        per_kind = {}
         for kind, (fn, _methods) in DETECTORS.items():
             mcfg = self.mk.get(kind, {})
             method = mcfg.get("method", _methods[0])
@@ -111,6 +112,15 @@ class Pipeline:
                 obs.markings.append(MarkingOut(marking_type=kind, status=Status.unassessable, method_version=ver))
                 continue
             cands = fn(norm, method, k=k, strict=mcfg.get("strict", False))
+            per_kind[kind] = (cands, ver)
+        cap = self.mk.get("max_candidates_per_eye", 8)
+        n_total = sum(len(c) for c, _ in per_kind.values())
+        for kind, (cands, ver) in per_kind.items():
+            if n_total > cap:  # implausibly many: reflections / lashes / mis-segmentation
+                obs.markings.append(MarkingOut(marking_type=kind, status=Status.unassessable, method_version=ver,
+                                               attributes={"reason": f"{n_total} candidates on this eye (> {cap}): "
+                                                           "likely reflections, lashes or a wrong iris outline"}))
+                continue
             all_cands += cands
             if not cands:
                 obs.markings.append(MarkingOut(marking_type=kind, status=Status.not_detected, method_version=ver))
