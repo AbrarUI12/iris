@@ -18,15 +18,11 @@ Requirements: Python 3.10–3.13, Git, ~2 GB disk for the code and libraries, an
 ## 1. Get the code
 
 ```bash
-git clone https://github.com/AbrarUI12/iris.git
+git clone --branch main https://github.com/AbrarUI12/iris.git
 ```
 
 ```bash
 cd iris
-```
-
-```bash
-git checkout claude/tender-cray-w7opo5
 ```
 
 The trained models (`models/*.onnx`, `models/*.json`) are in the repo, so you can analyse photos immediately.
@@ -90,10 +86,10 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 pip install -e ".[train]"
 ```
 
-Confirm the GPU is visible (should print `True NVIDIA GeForce RTX 4060 Laptop GPU`):
+Confirm the GPU is visible. On an RTX 4060 laptop this should print `True` and the GPU name.
 
 ```bash
-python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else torch.__version__)"
 ```
 
 `train/train_seg.py` uses the GPU automatically (`--device auto`) and prints `device: cuda (...)` at the

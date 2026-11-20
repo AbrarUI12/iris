@@ -1,4 +1,4 @@
-"""Train the compact iris/pupil segmenter on CPU, export ONNX, optionally INT8.
+"""Train the compact iris/pupil segmenter on CPU or CUDA and export ONNX.
 
 python -m train.train_seg --backbone small --size 224 --epochs 25 --out models/seg_small_224
 """

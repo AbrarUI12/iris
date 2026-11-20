@@ -44,7 +44,7 @@ pytest -q
 | `aeye_iris/color.py` | blue / brown / green_mixed / uncertain (rules or tiny learned model, numpy-only inference) |
 | `aeye_iris/markings/` | dark pigmentation, white marking, lacuna, contraction furrow, collarette, fibre orientation |
 | `aeye_iris/pipeline.py` + `pipeline.yaml` | config-driven end-to-end run (default = benchmark winner) |
-| `train/` | LightIrisNet-style segmenter training on CPU, ONNX export, INT8 static quantisation |
+| `train/` | LightIrisNet-style segmenter training on CPU or CUDA, ONNX export, INT8 static quantisation |
 | `synth/` | procedural eyes, marking injection, capture degradations (benchmark ground truth) |
 | `bench/` | segmentation grid, quality gate, colour, markings, end-to-end, report |
 
