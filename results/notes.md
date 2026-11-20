@@ -50,3 +50,16 @@ from the *validation* splits only: close-ups are ≥ 0.43 (5th percentile) and w
 * About 1 in 10 Synthetic-Human-Eyes masks still disagree with the image after automatic QC (eyelid/gaze
   mismatch in the source data), which caps every method's measured Dice on that set (same for all methods).
 * No public dataset labels the six SRS markings; their numbers come from synthetic injection only.
+
+### Self-training on real close-ups (UPOL train pseudo-labels)
+
+`scripts/pseudo_label_upol.py` labelled the UPOL **train** split with Daugman, keeping 130 of 198 images that passed strict automatic QC (pupil/iris ratio, concentricity, edge strength, close-up framing). Val and test images were never used. small_160 was then fine-tuned for 10 epochs with these images oversampled ×4 (`models/seg_small_160_st.onnx`).
+
+| | self-trained small_160 | default `auto` | acceptance rule (set before the run) |
+|---|---|---|---|
+| Real close-ups, 30 held-out (visual) | **29/30** | 28/30 | ≥ 28/30 ✔ |
+| Synthetic RGB iris Dice | **0.789** | 0.779 | drop ≤ 0.01 ✔ |
+| Real NIR iris Dice | 0.895 | 0.913 | drop ≤ 0.01 ✘ (−0.018) |
+| Latency per eye | ~12–23 ms (one model) | ~30–55 ms (Daugman + model) | – |
+
+It fails the NIR criterion, so **the default stays `auto`**. The self-trained model is the leading candidate for the visible-light A-EYE domain: enable it with `segmentation: {name: onnx, params: {model: seg_small_160_st.onnx}}`. Caveat: pseudo-labels come from Daugman, so the model can inherit its systematic errors. Promote it only after an independent check on hand-annotated A-EYE phone photos.

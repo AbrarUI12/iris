@@ -3,3 +3,4 @@ daugman|channel=red|clahe=True|inpaint=True|rmax_frac=0.6,28,30,7 22,22: pupil o
 onnx|model=seg_small_160.onnx,0,30,all,pupil mostly right; limbus underestimated (real high-res texture / iris-filling framing)
 hybrid|model=seg_small_160.onnx|limbus=search,27,30,15 20 22,failures follow wrong model pupil
 auto|model=seg_small_160.onnx,28,30,7 22,selects Daugman on all close-ups (closeup_frac>=0.40)
+onnx|model=seg_small_160_st.onnx (self-trained on 130 UPOL-train Daugman pseudo-labels),29,30,21,21: pupil oversized; fixes Daugman's failures 7 and 22
