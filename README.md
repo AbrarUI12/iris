@@ -24,6 +24,9 @@ organ function or health; zone labels are practitioner configuration (`ZoneMap.l
 
 ## Quick start
 
+Running on your own laptop / GPU: see [`docs/SETUP_LAPTOP.md`](docs/SETUP_LAPTOP.md).
+
+
 ```bash
 pip install -e ".[bench,train,dev]"
 python -m aeye_iris.pipeline --left left.jpg --right right.jpg --out runs/scan1

@@ -26,10 +26,11 @@ def soft_dice(logits, y, cls):
 
 
 @torch.no_grad()
-def evaluate(model, loader):
+def evaluate(model, loader, dev="cpu"):
     model.eval()
     d = {1: [], 2: []}
     for x, y, _ in loader:
+        x, y = x.to(dev), y.to(dev)
         pred = model(x).argmax(1)
         for c in (1, 2):
             a, b = pred == c, y == c
@@ -54,9 +55,13 @@ def main():
     ap.add_argument("--max_train", type=int, default=0)
     ap.add_argument("--repeat", nargs="*", default=[], help="dataset:k oversampling, e.g. upol_pseudo:4")
     ap.add_argument("--init", default=None, help="state_dict to start from (fine-tuning)")
+    ap.add_argument("--device", default="auto", help="auto | cpu | cuda (uses an NVIDIA GPU if available)")
+    ap.add_argument("--workers", type=int, default=0, help="DataLoader worker processes (set 4+ on a GPU machine)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     torch.set_num_threads(a.threads)
+    dev = ("cuda" if torch.cuda.is_available() else "cpu") if a.device == "auto" else a.device
+    print(f"device: {dev}" + (f" ({torch.cuda.get_device_name(0)})" if dev == "cuda" else ""), flush=True)
     torch.manual_seed(0)
     np.random.seed(0)
     out = Path(a.out)
@@ -70,11 +75,12 @@ def main():
         ds, k = spec.split(":")
         tr += [r for r in tr if r["dataset"] == ds] * (int(k) - 1)
     dl_tr = DataLoader(SegDataset(tr, a.root, a.size, True), batch_size=a.bs, shuffle=True,
-                       num_workers=0, drop_last=True)
+                       num_workers=a.workers, drop_last=True)
     dl_va = DataLoader(SegDataset(va, a.root, a.size, False), batch_size=32, num_workers=0)
     model = IrisSegNet(a.backbone, True, a.dec)
     if a.init:
-        model.load_state_dict(torch.load(a.init))
+        model.load_state_dict(torch.load(a.init, map_location="cpu"))
+    model = model.to(dev)
     print(f"train {len(tr)} val {len(va)} params {n_params(model)/1e6:.2f}M", flush=True)
     enc = [p for n, p in model.named_parameters() if n.startswith("features")]
     rest = [p for n, p in model.named_parameters() if not n.startswith("features")]
@@ -83,22 +89,23 @@ def main():
     steps = a.epochs * len(dl_tr)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=[a.lr * 0.3, a.lr], total_steps=steps,
                                                 pct_start=0.1 if steps >= 50 else 0.3)
-    cw = torch.tensor([0.5, 1.0, 1.5])
+    cw = torch.tensor([0.5, 1.0, 1.5], device=dev)
     best, hist = -1, []
     for ep in range(a.epochs):
         model.train()
         t0, tl = time.time(), 0.0
         for x, y, e in dl_tr:
+            x, y, e = x.to(dev), y.to(dev), e.to(dev)
             logits, edge = model(x)
             loss = (F.cross_entropy(logits, y, weight=cw) + soft_dice(logits, y, 1)
                     + soft_dice(logits, y, 2) + 0.5 * F.binary_cross_entropy_with_logits(
-                        edge, e, pos_weight=torch.tensor(5.0)))
+                        edge, e, pos_weight=torch.tensor(5.0, device=dev)))
             opt.zero_grad()
             loss.backward()
             opt.step()
             sched.step()
             tl += loss.item()
-        di, dp = evaluate(model, dl_va)
+        di, dp = evaluate(model, dl_va, dev)
         hist.append({"epoch": ep, "loss": tl / len(dl_tr), "val_dice_iris": di, "val_dice_pupil": dp,
                      "sec": time.time() - t0})
         print(json.dumps(hist[-1]), flush=True)
@@ -106,7 +113,8 @@ def main():
         if score > best:
             best = score
             torch.save(model.state_dict(), out / "best.pt")
-    model.load_state_dict(torch.load(out / "best.pt"))
+    model = model.cpu()
+    model.load_state_dict(torch.load(out / "best.pt", map_location="cpu"))
     model.eval()
     onnx_path = Path(str(out) + ".onnx")  # e.g. models/seg_small_224.onnx
     torch.onnx.export(model, torch.rand(1, 3, a.size, a.size), str(onnx_path), input_names=["image"],
