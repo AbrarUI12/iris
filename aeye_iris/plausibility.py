@@ -96,9 +96,9 @@ def reasons(m: dict, t: dict = T) -> list[str]:
         if m["ring_contrast"] < t["ring_contrast_min"] or m["sclera_in_ring"] > t["sclera_in_ring_max"]:
             out.append("iris boundary not found: very dark iris or poor light - use bright, indirect side light, "
                        "no glasses, eye wide open")
-        if np.isfinite(m.get("sclera_a", np.nan)) and not (t["cast_a_min"] <= m["sclera_a"] <= t["cast_a_max"]
-                                                           and m["sclera_b"] <= t["cast_b_max"]):
-            out.append("colour cast detected (tinted glasses or coloured light): remove glasses, use daylight")
+        # NOTE: a colour-cast retake was tried and removed: the band outside the limbus mixes
+        # sclera with pink lid skin / vessels, so it flagged good clinical photos (a* 21-27) and
+        # did not catch the tinted-glasses photos (a* -4..-6). sclera_a / sclera_b stay reported.
         if m["reflection_frac"] > t["reflection_frac_max"]:
             out.append("reflection on the eye: turn away from windows / screens / lamps")
     return out

@@ -63,3 +63,23 @@ from the *validation* splits only: close-ups are ≥ 0.43 (5th percentile) and w
 | Latency per eye | ~12–23 ms (one model) | ~30–55 ms (Daugman + model) | – |
 
 It fails the NIR criterion, so **the default stays `auto`**. The self-trained model is the leading candidate for the visible-light A-EYE domain: enable it with `segmentation: {name: onnx, params: {model: seg_small_160_st.onnx}}`. Caveat: pseudo-labels come from Daugman, so the model can inherit its systematic errors. Promote it only after an independent check on hand-annotated A-EYE phone photos.
+
+### Real-photo robustness (after the user's own phone photos)
+
+The first real phone photos (very dark brown irises, taken through tinted glasses, with a room reflected on the cornea) were **wrongly accepted**. The whole dark iris was read as the "pupil" and sclera/lids/skin as the "iris"; colour came out "blue", with 12–21 marking candidates per eye. Added `aeye_iris/plausibility.py`, wired into `quality.assess()` as a hard retake:
+
+* iris centre outside the frame or radius > 0.45 × image → "iris not found reliably"
+* iris/pupil outline not round (axis ratio > 1.35 / 1.6) → "look straight into the camera"
+* the "iris" ring is not darker than the visible surroundings (L* contrast < 5; black camera apertures ignored) or > 40% sclera-like pixels → "iris boundary not found: very dark iris or poor light …" (colour photos only; NIR irises are naturally bright)
+* bright scene reflection covering > 50% of the ring → "reflection on the eye"
+* markings: ≥ 300° arcs and spots spanning > 25% of the circle are rejected as boundary artefacts; > 8 candidates on one eye → all region markings `unassessable`
+
+Measured effect (thresholds tuned on validation; numbers are test):
+* the user's glasses photos → both **retake** with reasons (not committed; local only)
+* 30 graded UPOL close-ups → catches #7, the only real segmentation failure; 1 pre-existing false retake (#18: black camera border trips the fast "too dark" precheck)
+* synthetic RGB test → 26% retaken (mean Dice 0.66 vs 0.82 accepted), catching 52 of 123 failures. Many of the false retakes are side-gaze renders, where "look straight" is the desired behaviour.
+* real NIR test → 4% retaken
+
+Tried and removed: a colour-cast retake. The band outside the limbus mixes sclera with pink lid skin, so it misfired on clinical photos and did not detect the glasses tint.
+
+**Still unsolved:** very dark irises in ordinary light, where the pupil cannot be seen. The system now refuses these photos instead of producing nonsense. Analysing them needs better capture (bright indirect side light, macro distance), or NIR/IR illumination as dedicated iris cameras use.
