@@ -70,6 +70,26 @@ python -m aeye_iris.pipeline --left path/to/left_eye.jpg --right path/to/right_e
 Output: `runs/scan1/observation.json`, plus `left_iris_overlay.png` / `right_iris_overlay.png` showing the
 zones and marking candidates.
 
+To scan several pairs, put each pair in its own folder under `runs/photos`. Name the two files `left`
+and `right` with their image extensions, such as `left.jpg` and `right.png`.
+
+```text
+runs/photos/
+  pair-01/
+    left.jpg
+    right.jpg
+  pair-02/
+    left.jpg
+    right.png
+```
+
+```bash
+python -m aeye_iris.pipeline --pairs runs/photos --out runs/results
+```
+
+Each pair gets an `observation.json` and any available overlays under its own folder in `runs/results`.
+The batch reports incomplete or unreadable pairs and continues processing the other folders.
+
 **Photo tips:** one eye per photo, iris centred and sharp, eye wide open, diffuse light with no direct
 flash. A close-up where the iris fills most of the frame works best.
 

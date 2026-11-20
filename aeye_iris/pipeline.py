@@ -1,6 +1,7 @@
 """Config-driven end-to-end iris pipeline.
 
 python -m aeye_iris.pipeline --left L.jpg --right R.jpg --out out_dir [--config pipeline.yaml]
+python -m aeye_iris.pipeline --pairs runs/photos --out runs/results
 
 Stages: precheck -> segmentation -> quality assess -> normalise -> colour -> markings
 -> ScanObservation JSON (+ overlay PNGs). Output is descriptive only.
@@ -9,7 +10,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
+import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -28,6 +30,8 @@ from .types import (ColorOut, EllipseOut, EyeObservation, MarkingOut, ScanObserv
 from .zones import ZoneMap
 
 DEFAULT_CONFIG = Path(__file__).with_name("pipeline.yaml")
+EYE_SIDES = ("left", "right")
+PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 
 
 class Pipeline:
@@ -151,7 +155,8 @@ class Pipeline:
                 m = polar_mask_to_image(c.mask, norm, bgr.shape)
                 cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 cv2.drawContours(v, cnts, -1, colors.get(c.kind, (0, 255, 0)), 1)
-            cv2.imwrite(str(overlay_dir / f"{image_id}_overlay.png"), v)
+            _, encoded = cv2.imencode(".png", v)
+            (overlay_dir / f"{image_id}_overlay.png").write_bytes(encoded.tobytes())
         return obs
 
     # ------------------------------------------------------------------ scan
@@ -161,7 +166,7 @@ class Pipeline:
         if od:
             od.mkdir(parents=True, exist_ok=True)
         eyes = []
-        for side in ("left", "right"):
+        for side in EYE_SIDES:
             if side in images:
                 eyes.append(self.analyze_eye(images[side], side, f"{side}_iris", od))
         sid = scan_id or hashlib.sha1(b"".join(images[s].tobytes()[:4096] for s in sorted(images))).hexdigest()[:12]
@@ -169,29 +174,87 @@ class Pipeline:
                                zone_map_version=self.zones.version, config=self.cfg, eyes=eyes)
 
 
+def read_photos(paths: dict[str, Path]) -> dict[str, np.ndarray]:
+    images = {}
+    for side, path in paths.items():
+        try:
+            data = np.frombuffer(path.read_bytes(), dtype=np.uint8)
+            image = cv2.imdecode(data, cv2.IMREAD_COLOR) if data.size else None
+        except (OSError, cv2.error) as exc:
+            raise ValueError(f"cannot read {path}") from exc
+        if image is None:
+            raise ValueError(f"cannot read {path}")
+        images[side] = image
+    return images
+
+
+def pair_paths(folder: Path) -> dict[str, Path]:
+    photos = [path for path in folder.iterdir() if path.is_file() and path.suffix.lower() in PHOTO_EXTENSIONS]
+    paths = {}
+    for side in EYE_SIDES:
+        matches = [path for path in photos if path.stem.lower() == side]
+        if len(matches) != 1:
+            raise ValueError(f"expected one {side} photo, found {len(matches)}")
+        paths[side] = matches[0]
+    return paths
+
+
+def write_scan(pipe: Pipeline, images: dict[str, np.ndarray], out: Path) -> None:
+    t0 = time.perf_counter()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=out.parent) as temp:
+        staging = Path(temp)
+        obs = pipe.analyze(images, overlay_dir=staging)
+        (staging / "observation.json").write_text(obs.model_dump_json(indent=1), encoding="utf-8")
+        out.mkdir(exist_ok=True)
+        for side in EYE_SIDES:
+            name = f"{side}_iris_overlay.png"
+            overlay = staging / name
+            if overlay.is_file():
+                overlay.replace(out / name)
+            else:
+                (out / name).unlink(missing_ok=True)
+        (staging / "observation.json").replace(out / "observation.json")
+    print(f"wrote {out/'observation.json'} in {(time.perf_counter()-t0)*1000:.0f} ms")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--left")
-    ap.add_argument("--right")
+    ap.add_argument("--left", type=Path)
+    ap.add_argument("--right", type=Path)
+    ap.add_argument("--pairs", type=Path, help="folder containing one subfolder per left/right photo pair")
     ap.add_argument("--config", default=str(DEFAULT_CONFIG))
-    ap.add_argument("--out", default="runs/scan")
+    ap.add_argument("--out", type=Path, default=Path("runs/scan"))
     a = ap.parse_args()
-    imgs = {}
-    for side in ("left", "right"):
-        p = getattr(a, side)
-        if p:
-            im = cv2.imread(p, cv2.IMREAD_COLOR)
-            if im is None:
-                raise SystemExit(f"cannot read {p}")
-            imgs[side] = im
-    if not imgs:
-        raise SystemExit("give --left and/or --right")
+    paths = {side: getattr(a, side) for side in EYE_SIDES if getattr(a, side) is not None}
+    if a.pairs is None:
+        if not paths:
+            ap.error("give --left and/or --right, or use --pairs")
+        try:
+            images = read_photos(paths)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+        write_scan(Pipeline(a.config), images, a.out)
+        return
+
+    if paths:
+        ap.error("--pairs cannot be combined with --left or --right")
+    if not a.pairs.is_dir():
+        ap.error(f"pair folder does not exist: {a.pairs}")
+    folders = sorted(folder for folder in a.pairs.iterdir() if folder.is_dir())
+    if not folders:
+        ap.error(f"no pair subfolders in {a.pairs}")
     pipe = Pipeline(a.config)
-    t0 = time.perf_counter()
-    obs = pipe.analyze(imgs, overlay_dir=a.out)
-    out = Path(a.out)
-    (out / "observation.json").write_text(obs.model_dump_json(indent=1))
-    print(f"wrote {out/'observation.json'} in {(time.perf_counter()-t0)*1000:.0f} ms")
+    failed = False
+    for folder in folders:
+        try:
+            images = read_photos(pair_paths(folder))
+            write_scan(pipe, images, a.out / folder.name)
+        except (OSError, ValueError, cv2.error) as exc:
+            print(f"Skipping {folder.name}: {exc}", file=sys.stderr)
+            failed = True
+    if failed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
