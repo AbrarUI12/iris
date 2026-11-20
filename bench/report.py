@@ -164,12 +164,19 @@ def main():
                       "AUC blockiness", "AUC iris focus"]), "",
                "Overall (positive = 'retake'):", "",
                table([r for r in q if str(r["degradation"]).startswith("OVERALL")],
-                     ["degradation", "precision", "recall", "f1", "false_retake_rate", "accuracy"]), ""]
+                     ["degradation", "precision", "recall", "f1", "false_retake_rate", "accuracy"]), "",
+               "Confusion matrix (test; positive = degraded / should be retaken):", "",
+               table(read("quality/confusion.csv"), ["gate", "TP_degraded_retaken", "FN_degraded_accepted",
+                                                     "FP_good_retaken", "TN_good_accepted"],
+                     ["gate", "degraded → retake (TP)", "degraded → accepted (FN)", "good → retake (FP)", "good → accepted (TN)"], nd=0), ""]
     c = read("color/summary.csv")
     if c:
         st = json.loads((R / "color/stability.json").read_text()) if (R / "color/stability.json").exists() else {}
         md += ["## 4. Iris colour (pilot hand labels, subject-grouped 5-fold CV)", "",
                table(c[:12], ["feature", "model", "margin", "macro_f1", "accuracy", "uncertain_rate", "f1_on_decided"]), "",
+               "Confusion matrix of the shipped colour model (rows = hand label, columns = prediction; subject-grouped CV):", "",
+               "![colour confusion](color/confusion.png)", "",
+               table(read("color/per_class.csv"), ["class", "support", "precision", "recall", "f1"]), "",
                f"Same-eye stability (share of an eye's images given its majority class): `{json.dumps(st.get('majority_agreement', {}))}`", ""]
     m = [d for d in read("markings/injection_summary.csv") if d.get("split") == "test"]
     sel = read("markings/selected_test.csv")

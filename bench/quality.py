@@ -179,6 +179,16 @@ def main():
     summary.append(prf_row("default rules", np.array([r["gate_default"] for r in test])))
     summary.append(prf_row("calibrated rules", np.array([rule_gate(r, t_cal) for r in test])))
     summary.append(prf_row("logistic model (shipped)", (pt >= thr).astype(int)))
+    cm_rows = []
+    for name, pred in (("default rules", np.array([r["gate_default"] for r in test])),
+                       ("calibrated rules", np.array([rule_gate(r, t_cal) for r in test])),
+                       ("logistic model (shipped)", (pt >= thr).astype(int))):
+        cm_rows.append({"gate": name,
+                        "TP_degraded_retaken": int(((pred == 1) & (y == 1)).sum()),
+                        "FN_degraded_accepted": int(((pred == 0) & (y == 1)).sum()),
+                        "FP_good_retaken": int(((pred == 1) & (y == 0)).sum()),
+                        "TN_good_accepted": int(((pred == 0) & (y == 0)).sum())})
+    write_csv(out / "confusion.csv", cm_rows)
     summary.append({"degradation": "ALL (AUC)", "auc_logistic": float(roc_auc_score(y, pt)),
                     "auc_calibrated_rules": float(roc_auc_score(y, [rule_gate(r, t_cal) for r in test]))})
     write_csv(out / "summary.csv", summary)

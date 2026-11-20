@@ -63,6 +63,39 @@ from the *validation* splits only: close-ups are ≥ 0.43 (5th percentile) and w
   mismatch in the source data), which caps every method's measured Dice on that set (same for all methods).
 * No public dataset labels the six SRS markings; their numbers come from synthetic injection only.
 
+### Self-training on real close-ups (UPOL train pseudo-labels)
+
+`scripts/pseudo_label_upol.py` labelled the UPOL **train** split with Daugman, keeping 130 of 198 images that passed strict automatic QC (pupil/iris ratio, concentricity, edge strength, close-up framing). Val and test images were never used. small_160 was then fine-tuned for 10 epochs with these images oversampled ×4 (`models/seg_small_160_st.onnx`).
+
+| | self-trained small_160 | default `auto` | acceptance rule (set before the run) |
+|---|---|---|---|
+| Real close-ups, 30 held-out (visual) | **29/30** | 28/30 | ≥ 28/30 ✔ |
+| Synthetic RGB iris Dice | **0.789** | 0.779 | drop ≤ 0.01 ✔ |
+| Real NIR iris Dice | 0.895 | 0.913 | drop ≤ 0.01 ✘ (−0.018) |
+| Latency per eye | ~12–23 ms (one model) | ~30–55 ms (Daugman + model) | – |
+
+It fails the NIR criterion, so **the default stays `auto`**. The self-trained model is the leading candidate for the visible-light A-EYE domain: enable it with `segmentation: {name: onnx, params: {model: seg_small_160_st.onnx}}`. Caveat: pseudo-labels come from Daugman, so the model can inherit its systematic errors. Promote it only after an independent check on hand-annotated A-EYE phone photos.
+
+### Real-photo robustness (after the user's own phone photos)
+
+The first real phone photos (very dark brown irises, taken through tinted glasses, with a room reflected on the cornea) were **wrongly accepted**. The whole dark iris was read as the "pupil" and sclera/lids/skin as the "iris"; colour came out "blue", with 12–21 marking candidates per eye. Added `aeye_iris/plausibility.py`, wired into `quality.assess()` as a hard retake:
+
+* iris centre outside the frame or radius > 0.45 × image → "iris not found reliably"
+* iris/pupil outline not round (axis ratio > 1.35 / 1.6) → "look straight into the camera"
+* the "iris" ring is not darker than the visible surroundings (L* contrast < 5; black camera apertures ignored) or > 40% sclera-like pixels → "iris boundary not found: very dark iris or poor light …" (colour photos only; NIR irises are naturally bright)
+* bright scene reflection covering > 50% of the ring → "reflection on the eye"
+* markings: ≥ 300° arcs and spots spanning > 25% of the circle are rejected as boundary artefacts; > 8 candidates on one eye → all region markings `unassessable`
+
+Measured effect (thresholds tuned on validation; numbers are test):
+* the user's glasses photos → both **retake** with reasons (not committed; local only)
+* 30 graded UPOL close-ups → catches #7, the only real segmentation failure; 1 pre-existing false retake (#18: black camera border trips the fast "too dark" precheck)
+* synthetic RGB test → 26% retaken (mean Dice 0.66 vs 0.82 accepted), catching 52 of 123 failures. Many of the false retakes are side-gaze renders, where "look straight" is the desired behaviour.
+* real NIR test → 4% retaken
+
+Tried and removed: a colour-cast retake. The band outside the limbus mixes sclera with pink lid skin, so it misfired on clinical photos and did not detect the glasses tint.
+
+**Still unsolved:** very dark irises in ordinary light, where the pupil cannot be seen. The system now refuses these photos instead of producing nonsense. Analysing them needs better capture (bright indirect side light, macro distance), or NIR/IR illumination as dedicated iris cameras use.
+
 
 ## 2. Segmentation (visible-light synthetic eyes, held-out renders)
 
@@ -234,6 +267,7 @@ Validation (24 images, used for tuning):
 | onnx|model=seg_small_160.onnx | 0.000 | 30.000 | all | pupil mostly right; limbus underestimated (real high-res texture / iris-filling framing) |
 | hybrid|model=seg_small_160.onnx|limbus=search | 27.000 | 30.000 | 15 20 22 | failures follow wrong model pupil |
 | auto|model=seg_small_160.onnx | 28.000 | 30.000 | 7 22 | selects Daugman on all close-ups (closeup_frac>=0.40) |
+| onnx|model=seg_small_160_st.onnx (self-trained on 130 UPOL-train Daugman pseudo-labels) | 29.000 | 30.000 | 21.000 | 21: pupil oversized; fixes Daugman's failures 7 and 22 |
 
 ## 3. Capture-quality gate (synthetic degradations of held-out real images)
 
@@ -258,6 +292,14 @@ Overall (positive = 'retake'):
 | OVERALL calibrated rules | 0.985 | 0.729 | 0.837 | 0.160 | 0.736 |
 | OVERALL logistic model (shipped) | 0.993 | 0.944 | 0.968 | 0.090 | 0.942 |
 
+Confusion matrix (test; positive = degraded / should be retaken):
+
+| gate | degraded → retake (TP) | degraded → accepted (FN) | good → retake (FP) | good → accepted (TN) |
+|---|---|---|---|---|
+| default rules | 801 | 599 | 9 | 91 |
+| calibrated rules | 1020 | 380 | 16 | 84 |
+| logistic model (shipped) | 1322 | 78 | 9 | 91 |
+
 ## 4. Iris colour (pilot hand labels, subject-grouped 5-fold CV)
 
 | feature | model | margin | macro_f1 | accuracy | uncertain_rate | f1_on_decided |
@@ -274,6 +316,17 @@ Overall (positive = 'retake'):
 | lab_pct | knn | 0.150 | 0.805 | 0.806 | 0.000 | 0.805 |
 | hue_hist | knn | 0.000 | 0.782 | 0.795 | 0.000 | 0.782 |
 | hue_hist | knn | 0.150 | 0.782 | 0.795 | 0.000 | 0.782 |
+
+Confusion matrix of the shipped colour model (rows = hand label, columns = prediction; subject-grouped CV):
+
+![colour confusion](color/confusion.png)
+
+| class | support | precision | recall | f1 |
+|---|---|---|---|---|
+| blue | 78.000 | 0.824 | 0.897 | 0.859 |
+| brown | 150.000 | 0.917 | 0.953 | 0.935 |
+| green_mixed | 138.000 | 0.880 | 0.797 | 0.837 |
+| ACCURACY | 366.000 | 0.883 |  |  |
 
 Same-eye stability (share of an eye's images given its majority class): `{"learned": 0.9713541666666666, "thresholds": 0.9817708333333333}`
 

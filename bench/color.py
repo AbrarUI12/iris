@@ -97,6 +97,45 @@ def sheet(rows, root, out: Path, n=240, per=40):
     print(f"{len(tiles)} tiles -> {out}")
 
 
+def write_confusion(out: Path, y, pred, classes, title):
+    """Saves confusion.csv, per_class.csv and confusion.png (rows = true, cols = predicted)."""
+    cols = classes + (["uncertain"] if "uncertain" in pred else [])
+    M = np.array([[sum(1 for a, b in zip(y, pred) if a == t and b == p) for p in cols] for t in classes])
+    with open(out / "confusion.csv", "w") as f:
+        f.write("true\\pred," + ",".join(cols) + "\n")
+        for t, row in zip(classes, M):
+            f.write(t + "," + ",".join(map(str, row)) + "\n")
+    rows = []
+    for c in classes:
+        tp = sum(1 for a, b in zip(y, pred) if a == c and b == c)
+        fp = sum(1 for a, b in zip(y, pred) if a != c and b == c)
+        fn = sum(1 for a, b in zip(y, pred) if a == c and b != c)
+        P = tp / (tp + fp) if tp + fp else 0.0
+        R = tp / (tp + fn) if tp + fn else 0.0
+        rows.append({"class": c, "support": tp + fn, "precision": P, "recall": R,
+                     "f1": 2 * P * R / (P + R) if P + R else 0.0})
+    rows.append({"class": "ACCURACY", "support": len(y),
+                 "precision": float(np.mean([a == b for a, b in zip(y, pred)]))})
+    write_csv(out / "per_class.csv", rows)
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(4.6, 3.8), dpi=150)
+    ax.imshow(M, cmap="Blues")
+    ax.set_xticks(range(len(cols)), cols, rotation=30, ha="right")
+    ax.set_yticks(range(len(classes)), classes)
+    for i in range(M.shape[0]):
+        for j in range(M.shape[1]):
+            ax.text(j, i, int(M[i, j]), ha="center", va="center",
+                    color="white" if M[i, j] > M.max() / 2 else "black", fontsize=10)
+    ax.set_xlabel("predicted")
+    ax.set_ylabel("true (hand label)")
+    ax.set_title(title, fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out / "confusion.png")
+    print("confusion (rows=true):", cols, M.tolist())
+
+
 def macro_f1(y, p, classes):
     fs = []
     for c in classes:
@@ -163,6 +202,15 @@ def main():
                                 uncertain_rate=float(np.mean([q == "uncertain" for q in pred])),
                                 f1_on_decided=macro_f1([a for a, b in zip(y, pred) if b != "uncertain"],
                                                        [b for b in pred if b != "uncertain"], CLASSES)))
+    # confusion matrix + per-class metrics of the SHIPPED setting (lab_median, logistic, margin 0)
+    Xk = feats["lab_median"]
+    cv_pred = [None] * len(y)
+    for f in range(5):
+        tr, te = folds != f, folds == f
+        mdl = LearnedColor(fit_learned(Xk[tr], [y[i] for i in np.where(tr)[0]], "lab_median", "logistic"))
+        for i in np.where(te)[0]:
+            cv_pred[i] = mdl.predict(sure[i][2], 0.0)[0]
+    write_confusion(out, y, cv_pred, list(CLASSES), "colour (lab_median logistic, subject-grouped 5-fold CV)")
     res.sort(key=lambda d: -d["macro_f1"])
     write_csv(out / "summary.csv", res)
     for d in res[:8]:

@@ -1,0 +1,5 @@
+class,support,precision,recall,f1
+blue,78,0.82353,0.89744,0.8589
+brown,150,0.91667,0.95333,0.93464
+green_mixed,138,0.88,0.7971,0.8365
+ACCURACY,366,0.88251,,

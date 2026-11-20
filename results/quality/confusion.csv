@@ -1,0 +1,4 @@
+gate,TP_degraded_retaken,FN_degraded_accepted,FP_good_retaken,TN_good_accepted
+default rules,801,599,9,91
+calibrated rules,1020,380,16,84
+logistic model (shipped),1322,78,9,91
