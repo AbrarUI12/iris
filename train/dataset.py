@@ -24,9 +24,16 @@ def read_manifest(path: str | Path, split: str | None = None, datasets: list[str
     return rows
 
 
+UNION = 3  # label for "iris OR pupil, unknown which" (datasets without a pupil mask)
+
+
 def load_label(row: dict, root: Path) -> np.ndarray:
+    """0 background, 1 visible iris, 2 pupil, 3 iris-or-pupil (no pupil annotation)."""
     im = cv2.imread(str(root / row["iris_mask"]), cv2.IMREAD_GRAYSCALE) > 127
     lab = im.astype(np.uint8)
+    if row.get("pupil_mask") == "UNION":
+        lab[im] = UNION
+        return lab
     if row.get("pupil_mask"):
         pm = cv2.imread(str(root / row["pupil_mask"]), cv2.IMREAD_GRAYSCALE) > 127
         lab[pm & ~im] = 2

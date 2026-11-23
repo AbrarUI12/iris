@@ -1,0 +1,5 @@
+tag,dataset,n,dice_iris_mean,dice_iris_median,fail_rate_dice<0.8,e1_mean,hd95_median,dice_pupil_mean,pupil_center_err_median,ms_p50,ms_p95,seg_ok_rate
+auto|model=seg_small_160.onnx,periorbital,400,0.81871,0.89107,0.295,0.06217,33.42043,nan,nan,35.75221,50.4611,1.0
+daugman|channel=red|clahe=True|inpaint=True|rmax_frac=0.6,periorbital,400,0.71538,0.81925,0.46,0.08013,38.65063,nan,nan,25.87968,34.95078,1.0
+onnx|model=seg_small_160.onnx,periorbital,400,0.83953,0.89338,0.2675,0.04532,32.46209,nan,nan,10.14455,15.98064,1.0
+onnx|model=seg_small_160_st.onnx,periorbital,400,0.8374,0.90719,0.28,0.04793,20.055,nan,nan,10.10209,13.37647,1.0

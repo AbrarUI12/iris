@@ -145,6 +145,57 @@ def upol():
     return rows
 
 
+PERI_IRIS = 3  # periorbital class ids: 0 bg, 1 brow, 2 sclera, 3 iris(+pupil, unlabelled), 4 caruncle, 5 lid
+
+
+def periorbital(max_n: int = 0, seed: int = 0):
+    """Zenodo 13916845 (Nahass et al., Ophthalmology Science 2025): 2,842 two-eye RGB crops
+    from the Chicago Face Database and CelebAMask-HQ, 5 annotators. Annotations CC BY 4.0;
+    the PHOTOS keep their source licences (research only). Mostly dark irises, diverse
+    skin tones, real eyelid occlusion.
+
+    The iris mask INCLUDES the pupil (no pupil label), so pupil_mask is the marker
+    'UNION' and training uses a partial-label loss (iris-or-pupil) for those pixels.
+    Each image is split into one crop per eye (connected iris components), framed like
+    the synthetic set (random 4-6 R window, 4:3, saved at 400x300)."""
+    base = RAW / "periorbital" / "periorbital_dataset"
+    out_img = Path("data/cache/images/periorbital")
+    out_img.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(seed)
+    rows = []
+    for src in ("cfd", "celeb"):
+        imgs = sorted((base / f"{src}_final_data" / f"{src}_output_images").glob("*.jpg"))
+        for f in imgs[: max_n or None]:
+            mp = base / f"{src}_final_data" / f"{src}_output_masks" / (f.stem + ".png")
+            img, m = cv2.imread(str(f)), cv2.imread(str(mp), cv2.IMREAD_GRAYSCALE)
+            if img is None or m is None or m.shape != img.shape[:2]:
+                continue
+            iris = (m == PERI_IRIS).astype(np.uint8)
+            n, lbl, stats, cent = cv2.connectedComponentsWithStats(iris)
+            comps = sorted(range(1, n), key=lambda i: -stats[i, cv2.CC_STAT_AREA])[:2]
+            for ci in comps:
+                if stats[ci, cv2.CC_STAT_AREA] < 60:
+                    continue
+                cm = (lbl == ci).astype(np.uint8)
+                (cx, cy), R = cv2.minEnclosingCircle(cv2.findNonZero(cm))
+                side = "L" if cx < img.shape[1] / 2 else "R"
+                sw = R * rng.uniform(4.0, 6.0)
+                sh = sw * 0.75
+                x0 = cx + rng.uniform(-0.15, 0.15) * sw - sw / 2
+                y0 = cy + rng.uniform(-0.12, 0.12) * sh - sh / 2
+                M = np.float32([[400 / sw, 0, -x0 * 400 / sw], [0, 300 / sh, -y0 * 300 / sh]])
+                crop = cv2.warpAffine(img, M, (400, 300), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+                ci_m = cv2.warpAffine(cm, M, (400, 300), flags=cv2.INTER_NEAREST)
+                stem = f"{f.stem}_{side}"
+                ip_ = out_img / f"{stem}.jpg"
+                cv2.imwrite(str(ip_), crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                ip, _ = write_masks("periorbital", stem, ci_m, np.zeros_like(ci_m))
+                subj = f"{src}_{f.stem}"
+                rows.append(dict(id=f"periorbital/{stem}", dataset="periorbital", image=str(ip_), iris_mask=ip,
+                                 pupil_mask="UNION", subject=subj, split=split_of(subj, "peri"), eye=side))
+    return rows
+
+
 def upol_pseudo():
     """Daugman pseudo-labels on UPOL TRAIN images that passed strict QC
     (scripts/pseudo_label_upol.py). Train split only, by construction."""
@@ -158,7 +209,7 @@ def upol_pseudo():
 
 def main():
     rows = []
-    for fn in (nir_pupil_eye_iris, synthetic_eyes, upol, upol_pseudo):
+    for fn in (nir_pupil_eye_iris, synthetic_eyes, upol, upol_pseudo, periorbital):
         try:
             r = fn()
         except StopIteration:

@@ -18,11 +18,39 @@ from .dataset import SegDataset, read_manifest
 from .model import IrisSegNet, n_params
 
 
+UNION = 3  # "iris or pupil" (datasets without pupil masks)
+
+
 def soft_dice(logits, y, cls):
-    p = logits.softmax(1)[:, cls]
-    t = (y == cls).float()
+    """Soft Dice for class `cls`; images whose pupil is unannotated (label 3 present) are
+    excluded from the iris/pupil Dice and scored on the iris+pupil UNION instead."""
+    prob = logits.softmax(1)
+    has_union = (y == UNION).flatten(1).any(1)
+    if cls == UNION:
+        p = prob[:, 1] + prob[:, 2]
+        t = ((y == 1) | (y == 2) | (y == UNION)).float()
+        keep = torch.ones_like(has_union)
+    else:
+        p = prob[:, cls]
+        t = (y == cls).float()
+        keep = ~has_union
+    if keep.sum() == 0:
+        return logits.sum() * 0
+    p, t = p[keep], t[keep]
     inter = (p * t).sum((1, 2))
     return 1 - ((2 * inter + 1) / (p.sum((1, 2)) + t.sum((1, 2)) + 1)).mean()
+
+
+def partial_ce(logits, y, cw):
+    """Cross-entropy where label 3 means 'iris OR pupil': -log(p_iris + p_pupil)."""
+    logp = logits.log_softmax(1)
+    union = y == UNION
+    yy = torch.where(union, torch.ones_like(y), y)
+    nll = -logp.gather(1, yy[:, None])[:, 0]
+    nll_union = -torch.logsumexp(logp[:, 1:3], dim=1)
+    nll = torch.where(union, nll_union, nll)
+    w = cw[yy]
+    return (nll * w).sum() / w.sum()
 
 
 @torch.no_grad()
@@ -32,6 +60,9 @@ def evaluate(model, loader, dev="cpu"):
     for x, y, _ in loader:
         x, y = x.to(dev), y.to(dev)
         pred = model(x).argmax(1)
+        if (y == UNION).any():  # score iris+pupil union for unlabelled-pupil images
+            pred = torch.where((y == UNION).flatten(1).any(1)[:, None, None] & (pred == 2), torch.ones_like(pred), pred)
+            y = torch.where(y == UNION, torch.ones_like(y), y)
         for c in (1, 2):
             a, b = pred == c, y == c
             s = (a.sum((1, 2)) + b.sum((1, 2))).float()
@@ -97,8 +128,9 @@ def main():
         for x, y, e in dl_tr:
             x, y, e = x.to(dev), y.to(dev), e.to(dev)
             logits, edge = model(x)
-            loss = (F.cross_entropy(logits, y, weight=cw) + soft_dice(logits, y, 1)
-                    + soft_dice(logits, y, 2) + 0.5 * F.binary_cross_entropy_with_logits(
+            loss = (partial_ce(logits, y, cw) + soft_dice(logits, y, 1)
+                    + soft_dice(logits, y, 2) + soft_dice(logits, y, UNION)
+                    + 0.5 * F.binary_cross_entropy_with_logits(
                         edge, e, pos_weight=torch.tensor(5.0, device=dev)))
             opt.zero_grad()
             loss.backward()

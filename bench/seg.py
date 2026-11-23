@@ -64,13 +64,16 @@ def _run(args):
     except Exception as e:  # a crash counts as a failed segmentation
         r = SegResult(None, None, method=key, extra={"error": repr(e)})
     ms = (time.perf_counter() - t0) * 1000
-    gi, gp = lab == 1, lab == 2
-    has_p = bool(row.get("pupil_mask"))
+    union_only = row.get("pupil_mask") == "UNION"
+    gi, gp = (lab == 3, np.zeros_like(lab, bool)) if union_only else (lab == 1, lab == 2)
+    has_p = bool(row.get("pupil_mask")) and not union_only
     out = {"tag": key, "id": row["id"], "dataset": row["dataset"], "ms": ms, "ok": int(r.ok)}
     gt_pupil_e = ellipse_from_mask(gp) if has_p and gp.sum() > 20 else None
     norm = np.sqrt(max(gi.sum() + gp.sum(), 1) / np.pi)
     if r.ok:
         pi = r.iris_mask > 0
+        if union_only:  # GT iris includes the pupil: compare iris+pupil union
+            pi = pi | (r.pupil_mask > 0)
         out.update(dice_iris=dice(pi, gi), e1=nice1_error(pi, gi), hd95_iris=boundary_hd95(pi, gi))
         if has_p:
             pp = r.pupil_mask > 0
