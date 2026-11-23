@@ -24,6 +24,20 @@ python scripts/build_manifest.py          # -> data/manifest.csv (person-level 6
 * **UBIRIS.v2** (Kaggle `chinmoyslg/ubirisv2`): the images ship inside a **password-protected** archive. The password comes with the authors' research licence. Only the IRISSEG-EP masks were readable, so the dataset could not be used. No attempt was made to bypass the protection. If you obtain the licence, add the images and they slot into `build_manifest.py`.
 * MICHE, MOBIUS, CUVIRIS and OpenEDS are not openly downloadable (request forms).
 
+## Commercial-use status of shipped components (audit)
+
+Rule: nothing trained or tuned on research-only data ships commercially without permission from the data owner.
+
+| Component | Built from | Data licence | Commercial status |
+|---|---|---|---|
+| `seg_small_160.onnx` (default learned segmenter) | synth_eyes + nir_eye, ImageNet-pretrained MobileNetV3 | CC BY 4.0 / "MIT" (NIR image origin undocumented) / ImageNet weights | **Check:** confirm the NIR set's true origin; ImageNet-pretrained weights are widely used commercially, but ImageNet's own terms are research-oriented |
+| `seg_small_160_st.onnx` (self-trained candidate) | + UPOL pseudo-labels | UPOL: academic use | **Research only** (not the default) |
+| Daugman / classical methods | no training data | – | OK |
+| `models/color_model.json` | hand labels on UPOL images | UPOL: academic use | **Research only**: re-fit on A-EYE or commercially licensed photos before release |
+| `models/quality_model.json` | simulated damage on UPOL + synthetic images | UPOL: academic use | **Research only**: re-fit on synthetic-only or A-EYE photos before release |
+| Thresholds (auto close-up 0.40, plausibility, marking k) | tuned on UPOL / synthetic / NIR validation | mixed | Numbers only, but tuned on research data: re-check on A-EYE data |
+| `periorbital` dataset | CFD + CelebAMask-HQ photos | annotations CC BY 4.0, photos research-only | **Not used for any shipped model** (training stopped at the user's request) |
+
 ## QC applied to the synthetic renders
 
 The source segmentation sometimes ignores blink/gaze. Renders are kept only if blink ≤ 0.3, squint ≤ 0.5, the sclera is ≥ 20 L* brighter than the masked iris, and the pupil is darker than the iris. A visual spot-check shows about 1 in 10 remaining masks still mismatched. This lowers every method's Dice on this set equally.
